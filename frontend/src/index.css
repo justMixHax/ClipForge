@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* ClipForge theme: dark charcoal with one warm "ember" accent. */
+@theme {
+  --color-bg: #0b0d10;
+  --color-panel: #12151a;
+  --color-raised: #181c23;
+  --color-hover: #1f242d;
+  --color-line: #242a34;
+  --color-line-strong: #353c49;
+  --color-ink: #e9ebef;
+  --color-muted: #9ba3b0;
+  --color-faint: #69717e;
+  --color-accent: #ff7a3d;
+  --color-accent-soft: #ffb37a;
+  --color-good: #3ddc97;
+  --color-warn: #f5c451;
+  --color-bad: #ff6b6b;
+  --color-info: #6bb6ff;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Inter", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --animate-rise: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade: fade 0.2s ease-out both;
+  --animate-sheen: sheen 1.6s linear infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes sheen {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+}
+
+@layer base {
+  html { color-scheme: dark; }
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; }
+  ::selection { background: color-mix(in oklab, var(--color-accent) 35%, transparent); }
+  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 6px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  video { background: #000; }
+
+  input[type="range"] { accent-color: var(--color-accent); height: 4px; }
+  input[type="color"] { background: transparent; border: none; padding: 0; }
+}
+
+@layer components {
+  /* the faint glow behind the page: one subtle gradient, nothing more */
+  .app-glow {
+    background:
+      radial-gradient(900px 420px at 85% -10%, color-mix(in oklab, var(--color-accent) 9%, transparent), transparent 70%),
+      var(--color-bg);
+  }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .busy-sheen {
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-ink) 12%, transparent), transparent);
+    background-size: 200% 100%;
+    animation: var(--animate-sheen);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

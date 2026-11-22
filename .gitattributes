@@ -1,0 +1,5 @@
+# Windows scripts keep Windows line endings; everything else is left to Git.
+*.ps1 text eol=crlf
+*.mp4 binary
+*.ttf binary
+*.onnx binary

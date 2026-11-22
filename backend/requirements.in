@@ -1,0 +1,31 @@
+# Top-level dependencies. The exact tested versions are pinned in requirements.txt
+# (regenerate with: uv pip freeze --python backend/.venv/Scripts/python.exe > backend/requirements.txt)
+
+# Web API
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic>=2
+pydantic-settings
+httpx
+
+# Database
+sqlalchemy>=2.0
+alembic
+
+# Speech to text, analysis, reframing
+faster-whisper
+numpy
+opencv-python-headless
+pillow
+
+# Importing a video from a link (public videos only; see app/services/downloader.py)
+yt-dlp[default]
+
+# System
+psutil
+cryptography
+filelock
+
+# Tests
+pytest

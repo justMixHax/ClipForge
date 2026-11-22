@@ -1,0 +1,303 @@
+{
+  "duration": 174.357,
+  "sections": [
+    {
+      "name": "intro_filler",
+      "worthy": false,
+      "start": 0.0,
+      "end": 23.651
+    },
+    {
+      "name": "clutch",
+      "worthy": true,
+      "start": 23.651,
+      "end": 47.66
+    },
+    {
+      "name": "loot_filler",
+      "worthy": false,
+      "start": 47.66,
+      "end": 69.186
+    },
+    {
+      "name": "phone_story",
+      "worthy": true,
+      "start": 69.186,
+      "end": 95.656
+    },
+    {
+      "name": "chat_filler",
+      "worthy": false,
+      "start": 95.656,
+      "end": 111.554
+    },
+    {
+      "name": "hot_take",
+      "worthy": true,
+      "start": 111.554,
+      "end": 139.419
+    },
+    {
+      "name": "fail",
+      "worthy": true,
+      "start": 139.419,
+      "end": 161.369
+    },
+    {
+      "name": "outro_filler",
+      "worthy": false,
+      "start": 161.369,
+      "end": 174.357
+    }
+  ],
+  "lines": [
+    {
+      "section": "intro_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 0.0,
+      "end": 6.534,
+      "text": "Okay. So, um, welcome back to the stream, everybody.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "intro_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 7.234,
+      "end": 13.047,
+      "text": "Give me a second. I am just going to fix my audio settings here.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "intro_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 14.447,
+      "end": 21.851,
+      "text": "Yeah. Let me check the settings menu. Okay, I think that is fine now.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "clutch",
+      "voice": "Microsoft David Desktop",
+      "start": 23.651,
+      "end": 28.715,
+      "text": "Wait. There is one enemy left, and I have exactly one health point.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "clutch",
+      "voice": "Microsoft David Desktop",
+      "start": 29.215,
+      "end": 32.854,
+      "text": "Do not move. Do not even breathe.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "clutch",
+      "voice": "Microsoft David Desktop",
+      "start": 34.154,
+      "end": 38.903,
+      "text": "No way! No way! I got him! That was a headshot through the wall!",
+      "gain_db": 0.0
+    },
+    {
+      "section": "clutch",
+      "voice": "Microsoft David Desktop",
+      "start": 39.203,
+      "end": 42.796,
+      "text": "Let's go! That is the craziest clutch I have ever hit in my life!",
+      "gain_db": 0.0
+    },
+    {
+      "section": "clutch",
+      "voice": "Microsoft Zira Desktop",
+      "start": 43.296,
+      "end": 46.06,
+      "text": "Chat is going absolutely insane right now.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "loot_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 47.66,
+      "end": 54.093,
+      "text": "Alright. Um, so anyway, let me just pick up the loot here.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "loot_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 54.993,
+      "end": 60.557,
+      "text": "I need some ammo. And some bandages. Okay.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "loot_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 63.757,
+      "end": 67.186,
+      "text": "Hmm. Let me check the map.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft Zira Desktop",
+      "start": 69.186,
+      "end": 72.865,
+      "text": "Can I tell you the dumbest thing that happened to me yesterday?",
+      "gain_db": -10.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft David Desktop",
+      "start": 73.265,
+      "end": 74.725,
+      "text": "Go ahead.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft Zira Desktop",
+      "start": 75.125,
+      "end": 78.568,
+      "text": "I spent forty five minutes looking for my phone.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft Zira Desktop",
+      "start": 78.868,
+      "end": 83.167,
+      "text": "I checked the couch, I checked the car, I even checked the fridge.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft Zira Desktop",
+      "start": 83.767,
+      "end": 88.661,
+      "text": "And the whole time, I was using the flashlight on my phone to look for it.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "phone_story",
+      "voice": "Microsoft David Desktop",
+      "start": 89.161,
+      "end": 93.856,
+      "text": "Ha ha ha! You were holding it the entire time? That is incredible.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "chat_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 95.656,
+      "end": 102.69,
+      "text": "So yeah. Um, thanks for the follow, by the way. Thank you.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "chat_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 103.89,
+      "end": 109.354,
+      "text": "Let me read some chat messages. Hello to everyone joining.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft David Desktop",
+      "start": 111.554,
+      "end": 116.053,
+      "text": "Here is my hot take, and I know people will be mad about this.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft David Desktop",
+      "start": 116.453,
+      "end": 120.988,
+      "text": "Open world games are getting way too big. Nobody finishes them.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft David Desktop",
+      "start": 121.388,
+      "end": 125.612,
+      "text": "I would rather play a perfect ten hour game than a boring hundred hour game.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft David Desktop",
+      "start": 126.012,
+      "end": 127.936,
+      "text": "Bigger is not better.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft Zira Desktop",
+      "start": 128.536,
+      "end": 133.665,
+      "text": "That is actually a terrible opinion. Exploring a huge map is the whole point.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "hot_take",
+      "voice": "Microsoft David Desktop",
+      "start": 134.065,
+      "end": 137.619,
+      "text": "No, you are wrong, and I will die on this hill.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "fail",
+      "voice": "Microsoft David Desktop",
+      "start": 139.419,
+      "end": 145.957,
+      "text": "Okay, watch this jump. I have done this a thousand times. Easy.",
+      "gain_db": -10.0
+    },
+    {
+      "section": "fail",
+      "voice": "Microsoft David Desktop",
+      "start": 147.357,
+      "end": 153.071,
+      "text": "No! No, no, no, no! I fell off the map! I lost everything!",
+      "gain_db": 0.0
+    },
+    {
+      "section": "fail",
+      "voice": "Microsoft David Desktop",
+      "start": 153.371,
+      "end": 155.815,
+      "text": "Three hours of progress, gone!",
+      "gain_db": 0.0
+    },
+    {
+      "section": "fail",
+      "voice": "Microsoft Zira Desktop",
+      "start": 156.415,
+      "end": 159.569,
+      "text": "That might be the worst fail I have ever seen.",
+      "gain_db": -5.0
+    },
+    {
+      "section": "outro_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 161.369,
+      "end": 165.683,
+      "text": "Alright, um, I think that is it for today.",
+      "gain_db": -15.0
+    },
+    {
+      "section": "outro_filler",
+      "voice": "Microsoft David Desktop",
+      "start": 166.483,
+      "end": 172.857,
+      "text": "Thanks for watching, everyone. See you tomorrow. Bye.",
+      "gain_db": -15.0
+    }
+  ]
+}
