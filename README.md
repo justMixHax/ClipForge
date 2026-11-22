@@ -49,20 +49,29 @@ The second command opens `http://localhost:3000`. Press Ctrl+C in that window to
    layout, shape and hook title, with undo and redo. Save and render again.
 6. **Download or export.** Download the MP4, SRT or VTT, or select clips in the Clip Library and export them
    to a folder with a text file holding the title, description, hashtags, source and rights note.
+7. **Clip a moment yourself.** Found a good moment while watching? Under **3 · Clip a moment yourself**, type
+   where it starts (`1:02:15`, `62:15`, or paste a YouTube link copied at that moment), or press **Watch and
+   mark** and use **Start here** and **End here** in the player. Leave the end empty and Claude ends it right
+   after the payoff. The same work as for the AI's picks follows: title, hook, score, ChatGPT's verdict,
+   captions, render and checks. Your start is kept; only a start in the middle of a word moves to its edge.
+8. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
+   developer app, then the platform's own sign-in; the page walks you through it). Then **New post**: pick
+   approved clips, accounts, the text (Claude can suggest it) and now or a time. The **Calendar** shows what
+   goes out when. A post reads Published only once the platform has confirmed it.
 
 ## What works, and what does not
 
-Checked on this PC on 21 November 2026. The same list, live, is in the app under **Settings → What works,
+Checked on this PC on 22 November 2026. The same list, live, is in the app under **Settings → What works,
 and what does not yet**.
 
 | | |
 |---|---|
-| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
+| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
 | **Working, with a caveat** | Face-aware reframing and facecam detection: checked only on synthetic test footage so far, and the crop stays fixed for the whole clip. Look at the framing on real footage before relying on it. |
 | **Needs setup** | Nothing on this PC. On another PC with an NVIDIA card, speech-to-text on the graphics card needs `scripts\enable-gpu.ps1` run once (about 1.3 GB); until then it runs on the processor. |
-| **Waiting for your credentials** | Nothing yet. The integrations that will need credentials are not built; the encrypted store they will use exists. |
-| **Blocked by a third party** | TikTok direct posting (their app audit) and Instagram Reels (Meta app review and a public media URL). Not built. |
-| **Planned, not built** | Creator discovery and watchlists · YouTube Shorts upload · scheduling calendar · analytics · AI strategist · automation rules · who-is-speaking detection · crops that follow a moving subject · saving your own presets |
+| **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). |
+| **Blocked by a third party** | TikTok direct posting: TikTok's rules for it exclude tools for posting to your own accounts. Drafts work instead. |
+| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · crops that follow a moving subject · saving your own presets |
 
 The full plan is in [ROADMAP.md](ROADMAP.md).
 

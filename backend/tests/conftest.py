@@ -105,9 +105,10 @@ def sample_video() -> Path:
 class LocalSite:
     """A web server on 127.0.0.1 that serves one video, one page without a video, and 404 for the rest."""
 
-    def __init__(self, video: bytes, delay: float = 0.0) -> None:
+    def __init__(self, video: bytes, delay: float = 0.0, refuse: set[int] | None = None) -> None:
         site = self
         self.video, self.delay, self.requests = video, delay, []
+        self.refuse, self.gets = set(refuse or ()), 0   # GET requests (counted from 1) answered with 403
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self, *args) -> None:  # noqa: ANN002  (keep the test output quiet)
@@ -122,6 +123,11 @@ class LocalSite:
             def _serve(self, send_body: bool) -> None:
                 path = self.path.split("?")[0]
                 site.requests.append((self.command, path))
+                if self.command == "GET" and path == "/clip.mp4":
+                    site.gets += 1
+                    if site.gets in site.refuse:
+                        self.send_error(403)
+                        return
                 if path == "/clip.mp4":
                     body, kind = site.video, "video/mp4"
                 elif path == "/page.html":

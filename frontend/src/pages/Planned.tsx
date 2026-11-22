@@ -1,13 +1,13 @@
 // Pages for the parts of the product that are not built yet. They say so plainly, list what each part
 // needs, and point at what already works today. No mock data, no buttons that pretend.
-import { BarChart3, BrainCircuit, CheckCircle2, CircleDashed, CircleSlash, Compass, Lock, Send, Workflow, Wrench } from "lucide-react";
+import { BarChart3, BrainCircuit, CheckCircle2, CircleDashed, CircleSlash, Compass, Lock, Workflow, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, Spinner, type Tone } from "../components/ui";
 import type { Feature } from "../lib/api";
 import { useFeatures } from "../lib/hooks";
 
-type Area = "discovery" | "publishing" | "analytics" | "automation" | "strategist";
+type Area = "discovery" | "analytics" | "automation" | "strategist";
 
 const PAGES: Record<Area, { title: string; icon: ReactNode; summary: string; features: string[]; needs: string[]; today: { text: string; to: string; label: string } }> = {
   discovery: {
@@ -20,18 +20,6 @@ const PAGES: Record<Area, { title: string; icon: ReactNode; summary: string; fea
       "Only public figures the official API provides. No impressions, retention or other private numbers.",
     ],
     today: { text: "You can already import a video by pasting its link, and record the creator and your right to clip on every video you add.", to: "/clipper", label: "Open the AI Clipper" },
-  },
-  publishing: {
-    title: "Publishing Studio", icon: <Send className="h-6 w-6" />,
-    summary: "Connect your own TikTok, Instagram and YouTube accounts, queue approved clips, and schedule them.",
-    features: ["manual_export", "publish_youtube", "publish_tiktok", "publish_instagram", "scheduling"],
-    needs: [
-      "YouTube: your own Google Cloud OAuth client. Uploads from an unverified app stay private until Google verifies it.",
-      "TikTok: a developer app that has passed TikTok's audit before it may post publicly.",
-      "Instagram: Meta app review, a professional account, and a way to hand Meta a public link to each video.",
-      "Only official sign-in. No passwords, cookies or hidden browser automation, and nothing is marked published until the platform confirms it.",
-    ],
-    today: { text: "Manual export works now: download a clip, or export many to a folder with title, description, hashtags and source details.", to: "/library", label: "Open the Clip Library" },
   },
   analytics: {
     title: "Analytics", icon: <BarChart3 className="h-6 w-6" />,

@@ -8,15 +8,15 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 631 tests, about a minute and a half, plus a type-check of the interface. No speech model is needed;
+The fast suite: 776 tests, plus a type-check of the interface. No speech model is needed;
 tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 639
-tests, a little over three minutes. They need the sample video, which is not kept in Git:
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 784
+tests, about five and a half minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
@@ -25,8 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 22 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 639 passed,
-0 failed, 0 skipped, in 4 minutes 13 seconds.
+**Last full run:** 22 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 784 passed,
+0 failed, 0 skipped, in 5 minutes 31 seconds.
 
 ## How the tests are built
 
@@ -57,6 +57,9 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 | `test_queue.py` | 14 | Claiming, progress, heartbeat, cancel, retry, recovery of interrupted jobs, attempt limit |
 | `test_api.py`, `test_api_library.py` | 67 | Upload and its rejections, linking from disk, playback with seeking, clips, captions, feedback, batch actions, manual order, variants, caption files, post text, export, projects, cleanup, storage, settings, search, cross-site and wrong-host requests, persistence across a restart, honest feature status |
 | `test_downloader.py`, `test_import.py` | 69 | Importing from a link, with the real downloader against a web site started on this PC for the test: download, progress, cancel, size limit, missing video, page without a video, unreachable site; which links are accepted; failures explained in plain words; the import job with source and rights stored, duplicates, disk-space check, pause and resume; the API refusing to start without a stated right to clip |
+| `test_timecode.py`, `test_moments.py` | 67 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log |
+| `test_publishing_adapters.py` | 29 | YouTube, TikTok and Instagram against stand-ins of their APIs built from the documentation: sign-in with PKCE (checked against the standard's own example), token renewal, a resumable upload that continues after a break, a retried post that resumes instead of uploading twice, TikTok's chunk rules, a Reel never published twice, quota and refusal messages |
+| `test_publishing_service.py`, `test_publishing_api.py` | 45 | The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; Claude's post text; honest feature status and dashboard numbers |
 | `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 45 | File-name and path safety, encrypted credentials, masking of credentials in logs, where the server listens and how it stops |
 | `test_claude_review.py` and the Claude tests in `test_pipeline.py` | 16 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained, and the local rules take over when Claude cannot be reached |
 | `test_ffmpeg_service.py`, `test_hardware.py` | 16 | Probing, progress, error reporting, encoder tests, the graphics card is only recommended after passing its test |
@@ -141,6 +144,18 @@ The first real run also found a defect: started from inside another Claude progr
 program's connection settings on to the tool, which then ignored the user's own sign-in. Fixed and tested
 (`test_the_tool_gets_a_clean_environment_so_it_uses_your_own_sign_in`).
 
+## A clip from your own timestamp, 22 November 2026
+
+On the 2-hour stream, through the interface: the start typed as `1:02:31`, no end. Claude ended it at 1:03:04,
+right after the payoff, and named it "Scam Call Gets Presidential"; ChatGPT agreed with it. It rendered on the
+graphics card in 5 seconds, but only 7 of 8 checks passed: the typed second fell 0.16 s before the end of the
+word "destroyed.", so the clip opened on half a word. Since then a start or end inside a word moves to the
+word's edge (at most 0.6 s) and the work log says so. The clip was moved and rendered again, and all 8 checks
+passed.
+
+The Publishing Studio's three pages were checked in the browser: the accounts with their setup steps, the
+composer with your approved clips, and the calendar. No real post has been made: no account is connected yet.
+
 ## Code reviews by ChatGPT
 
 Since 22 November 2026, changes are reviewed by ChatGPT (GPT-6.2 Astra, through Codex) before they are
@@ -164,10 +179,19 @@ Kept here because a test suite that never finds anything proves little.
 | Start-up tests | The address the server listened on and the address the safety checks assumed came from two different places and could disagree | Yes |
 | Restarting the app with a browser tab open | `stop.ps1` had to use force: an open connection kept the server from ever finishing its orderly shutdown | Yes: requests in flight get 4 seconds, then the server stops; covered by a test that holds a request open |
 | Trying the graphics card through the API | A clip length the app does not know (`10-40`) was silently replaced by the default range, so one clip went missing | Yes: an unknown length is now refused with a message |
+| Importing a 2-hour YouTube stream | YouTube refused the download part-way (HTTP 403) although the video was fine, and the import failed at 4% | Yes: the download asks again for fresh addresses and continues the partial file, up to 4 tries (simulated with a local test site that refuses requests) |
+| Making a clip from a typed timestamp on a real stream | A start typed in whole seconds opened the clip on half a word (the quality check caught it) | Yes: a start or end inside a word moves to the word's edge, at most 0.6 s, and the work log says so |
+| Reading the publishing code before committing | A post whose app credentials had been removed, or whose follow-up check failed in a way nobody expected, stayed due and would have been tried again every 10 seconds | Yes: it fails once, with the reason; two tests |
 | Real-model transcription test | The speech model occasionally returns a word with no duration or one stretched across a pause | Yes: word times are corrected against the audio |
 
 ## Not tested
 
+- **Publishing to the real platforms.** No account is connected yet, so no real post has been made. The
+  adapters follow each platform's documentation as it stood in November 2026 and pass against local stand-ins
+  of the three APIs; the first real post on each platform is the real test. Two things the documentation left
+  open: whether Google accepts the bare return address `http://127.0.0.1:3000` for your Desktop client as its
+  examples show (ClipForge uses exactly that form), and whether TikTok's sandbox delivers drafts to your own
+  account before TikTok has reviewed your app.
 - **Real streams.** One real video has been through it: Blender's film Sintel (Creative Commons), imported
   from its YouTube link on 21 November 2026 through the interface. It downloaded in about 8 seconds at 720p,
   was transcribed correctly, and gave two sensible clips that rendered and passed every check, but they

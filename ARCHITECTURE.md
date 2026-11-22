@@ -242,13 +242,48 @@ works today.
 | Link imports ask for your right to clip first, and never sign in | A public video is not automatically yours to repost; cookies and logins would hand a downloader your accounts | Private, members-only and age-restricted videos cannot be imported from a link; you add those as files |
 | Built interface served by the API | One address, one command, no CORS setup | Interface changes need a rebuild (or `start.ps1 -Dev`) |
 
+## Clips from your own timestamps
+
+`POST /api/videos/{id}/moments` takes a start (typed, marked in the player, or a link with `?t=`, read by
+`services/timecode.py`) and an optional end, and queues a `moment` job (`jobs/pipeline.py`, `_moment`). It
+reuses the analysis's transcript step (or transcribes once, if the video was never analysed), then:
+
+- Claude (`claude_review.build_moment_prompt`) reads the transcript around the moment, keeps your start, picks
+  the end right after the payoff when you gave none, and names the clip;
+- the local rules (`engine.moment_highlight`) add the 12-part breakdown and evidence, and pick the end
+  themselves when Claude is off or unreachable (the best-scoring sentence end inside your length);
+- a start or end that would chop a word moves to the word's edge, at most 0.6 s, and the work log says so;
+- ChatGPT gives a verdict only (`chatgpt_review.build_prompt(chosen_by_user=True)`), never additions;
+- the clip is saved with `origin="manual"` and rendered straight away.
+
+## Publishing
+
+The `publishing/` package:
+
+- `base.py`: shared types (`Tokens`, `Draft`, `Outcome`, and `PublishError` marked retry or reconnect) and an
+  HTTP client that turns every failure into a message and keeps tokens out of addresses and logs.
+- `oauth.py`: PKCE (base64url for Google, hex for TikTok's desktop sign-in) and single-use, ten-minute states.
+- `youtube.py`, `tiktok.py`, `instagram.py`: one adapter each for sign-in, renewal, upload and confirmation.
+  YouTube uses the resumable protocol, so a break continues where it stopped and a retried post resumes the
+  same upload. TikTok uploads to the inbox in chunks by its rules. Instagram uses the resumable upload of
+  Facebook Login for Business, so no public address is needed, and records the published id at once so a
+  retry never posts twice.
+- `store.py`: your developer-app credentials and the accounts' tokens in the encrypted store, renewed before use.
+- `service.py`: the queue (all or nothing, with the safeguards), the `publish` job, retries (two, after 2 and
+  10 minutes), follow-up checks (processing, TikTok drafts), cancel, retry, remove, connect and disconnect.
+- `assistant.py`: Claude's title, caption and hashtags for a clip, from what is said in it.
+
+Two tables: `accounts` (one per connected account, no secrets) and `posts` (one per clip and account: status,
+times, text, the platform's id and link, and the upload state that lets a retry resume). The worker looks for
+posts whose time has come every 10 seconds (`enqueue_due`). A post goes scheduled → publishing → processing →
+published, or ends as scheduled_on_platform (YouTube publishes it itself), private, in_drafts (TikTok inbox),
+failed or cancelled.
+
 ## Where the planned parts will plug in
 
 - **Language-model review** (`analysis/`): a pass after scoring that re-ranks the top candidates and writes
   titles, behind a provider interface (Ollama locally, or a paid API with a cost estimate and explicit
   opt-in). The settings and encrypted key store for it exist.
-- **Publishing** (new `publishing/` package): one adapter per platform using official OAuth only, tokens in
-  the encrypted store, a `publications` table, and a post is marked published only when the platform confirms.
 - **Discovery** (new `sources/` package): YouTube Data API with your own key; a discovered video is a
   suggestion with a rights status, which you can then import with the link importer.
 - **Analytics**: metrics tables fed only by connected accounts or values you type in, each labelled with its

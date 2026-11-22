@@ -15,7 +15,7 @@ const NAV = [
   { to: "/discovery", label: "Creator Discovery", icon: Compass, built: false },
   { to: "/library", label: "Clip Library", icon: Library, built: true },
   { to: "/editor", label: "Video Editor", icon: SlidersHorizontal, built: true },
-  { to: "/publishing", label: "Publishing Studio", icon: Send, built: false },
+  { to: "/publishing", label: "Publishing Studio", icon: Send, built: true },
   { to: "/analytics", label: "Analytics", icon: BarChart3, built: false },
   { to: "/automation", label: "Automation Center", icon: Workflow, built: false },
   { to: "/strategist", label: "AI Strategist", icon: BrainCircuit, built: false },

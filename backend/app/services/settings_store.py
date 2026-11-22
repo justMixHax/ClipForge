@@ -69,6 +69,7 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "llm.base_url": ("http://localhost:11434", _text(200)),
     "llm.allow_paid": (False, _flag),
     "notifications.browser": (True, _flag),
+    "publish.daily_limit": (6, _number(1, 25)),
 }
 SECRET_NAMES = ("llm.openai_api_key", "llm.anthropic_api_key", "youtube.api_key")
 
@@ -115,8 +116,15 @@ def _secret_box() -> SecretBox:
 
 
 def set_secret(session: Session, name: str, value: str) -> None:
+    """For the settings page: only the credentials it lists."""
     if name not in SECRET_NAMES:
         raise ClipForgeError(f"Unknown credential: {name}")
+    put_secret(session, name, value)
+
+
+def put_secret(session: Session, name: str, value: str) -> None:
+    """Store a credential encrypted (an empty value deletes it). For backend code only: publishing keeps app
+    credentials and account tokens here under names the settings page never lists."""
     value = value.strip()
     row = session.get(Secret, name)
     if not value:

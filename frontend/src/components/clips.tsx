@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, FileText, Film,
   Heart, MessageSquareWarning, Pencil, Play, RefreshCw, Trash2, X, XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Clip, Job, Options } from "../lib/api";
 import { api } from "../lib/api";
@@ -383,12 +383,28 @@ export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | nu
 }
 
 /** Play the original video from a timestamp, to check a suggestion against its source. */
-export function SourcePeek({ videoId, time, title, onClose }: { videoId: number | null; time: number | null; title?: string; onClose: () => void }) {
+export function SourcePeek({ videoId, time, title, onClose, onMark, marks }: {
+  videoId: number | null; time: number | null; title?: string; onClose: () => void;
+  /** With this, the player offers Start here and End here for "Clip a moment yourself". */
+  onMark?: (which: "start" | "end", seconds: number) => void; marks?: { start: string; end: string };
+}) {
+  const player = useRef<HTMLVideoElement>(null);
   if (videoId === null || time === null) return null;
+  const mark = (which: "start" | "end") => {
+    if (player.current && onMark) onMark(which, player.current.currentTime);
+  };
   return (
     <Modal open onClose={onClose} title={`Source${title ? `: ${title}` : ""} at ${clock(time, true)}`} wide>
-      <video src={`/api/videos/${videoId}/stream#t=${Math.max(0, time - 0.5).toFixed(2)}`} controls autoPlay playsInline className="max-h-[72vh] w-full rounded-xl border border-line" />
-      <p className="mt-2 text-xs text-faint">Playing the untouched source from just before the timestamp.</p>
+      <video ref={player} src={`/api/videos/${videoId}/stream#t=${Math.max(0, time - 0.5).toFixed(2)}`} controls autoPlay playsInline className="max-h-[72vh] w-full rounded-xl border border-line" />
+      {onMark ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => mark("start")}>Start here</Button>
+          <Button size="sm" onClick={() => mark("end")}>End here</Button>
+          <span className="text-xs text-faint">
+            {marks?.start ? `Start ${marks.start}` : "No start marked yet"}{marks?.end ? ` · End ${marks.end}` : ""}. These go into “Clip a moment yourself”.
+          </span>
+        </div>
+      ) : <p className="mt-2 text-xs text-faint">Playing the untouched source from just before the timestamp.</p>}
     </Modal>
   );
 }

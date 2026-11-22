@@ -23,9 +23,11 @@ from ..errors import ClipForgeError, DependencyMissing, NotFound, TooLarge, Unsu
 from ..jobs import pipeline, queue
 from ..models import Clip, Job, TranscriptSegment, Video
 from ..schemas import (AnalyzeIn, ClipCreate, ClipOut, ImportPathIn, ImportUrlIn, InspectUrlIn, JobOut, LinkInfoOut,
+                       MomentIn,
                        SegmentOut, SegmentPatch, VideoOut, VideoPatch)
 from ..security.paths import PathSecurityError, has_allowed_extension, safe_filename, validate_import_path
 from ..services import downloader, ffmpeg, storage
+from ..services.timecode import parse_time, youtube_id
 from ..services.library import register_video
 from .common import clip_out, ensure_project, get_video, job_out, video_out
 
@@ -203,6 +205,39 @@ def analyze_video(video_id: int, body: AnalyzeIn, session: Session = Depends(get
     options = body.model_dump(exclude_none=True)
     job = pipeline.enqueue_analysis(session, video, options)
     return job_out(job)
+
+
+@router.post("/{video_id}/moments", response_model=JobOut)
+def clip_a_moment(video_id: int, body: MomentIn, session: Session = Depends(get_db)) -> JobOut:
+    """Make a clip from a moment you chose. Your start is kept exactly; ClipForge does the same work as for the
+    moments it finds (end point, title, hook, score, second opinion, render). Asking twice queues it once."""
+    video = get_video(session, video_id)
+    if video.permission_status == "denied":
+        raise ClipForgeError("This source is marked as not permitted for clipping.",
+                             hint="Change that under Source and rights if it is wrong.")
+    storage.video_source_path(video)  # fail now, with a clear message, if the file has gone missing
+    own = youtube_id(video.source_url)
+    for value in (body.start, body.end):
+        linked = youtube_id(value) if isinstance(value, str) else None
+        if linked and own and linked != own:
+            raise ClipForgeError("That link is for a different video than the one open here.",
+                                 hint="Open that video in ClipForge first, or copy the link from this video.")
+    start = parse_time(body.start)
+    end = None if body.end is None or (isinstance(body.end, str) and not body.end.strip()) else parse_time(body.end)
+    clock = pipeline._clock
+    if start >= video.duration - 0.5:
+        raise ClipForgeError(f"This video is only {clock(video.duration)} long, so a moment cannot start at "
+                             f"{clock(start)}.")
+    if end is not None:
+        if end <= start:
+            raise ClipForgeError("The end must come after the start.")
+        end = min(end, video.duration)
+        if end - start < 1.0:
+            raise ClipForgeError("A clip must be at least 1 second long.")
+        if end - start > 600:
+            raise ClipForgeError("A clip can be at most 10 minutes long.")
+    options = body.options.model_dump(exclude_none=True) if body.options is not None else {}
+    return job_out(pipeline.enqueue_moment(session, video, start=start, end=end, options=options))
 
 
 @router.get("/{video_id}/transcript", response_model=list[SegmentOut])

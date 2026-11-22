@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from functools import lru_cache
@@ -33,6 +34,11 @@ os.environ.setdefault("YTDLP_NO_PLUGINS", "1")  # read by yt-dlp when it is firs
 
 log = logging.getLogger("clipforge.downloader")
 QUALITIES = (720, 1080, 1440, 2160)
+# YouTube sometimes refuses a long download part-way (HTTP 403) although the video is fine: asking again for
+# fresh download addresses and continuing the partial file works. These are the pauses before each new try.
+RETRY_WAITS = (5.0, 15.0, 30.0)
+_PASSING_TROUBLE = ("403", "forbidden", "http error 5", "timed out", "connection reset", "incompleteread",
+                    "remote end closed", "connection aborted")
 MAX_URL_LENGTH = 2000
 UPDATE_HINT = "If this site worked before, the downloader may need an update: run scripts\\update-downloader.ps1."
 FILE_HINT = "Download the file yourself with an account that may watch it, then add the file to ClipForge."
@@ -56,6 +62,7 @@ class LinkInfo:
     approx_bytes: int | None    # size of what would be downloaded at the chosen quality
     width: int | None
     height: int | None
+    retries: int = 0            # times the download was refused part-way and continued
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -327,6 +334,21 @@ def inspect_link(url: str, *, max_height: int = 1080, max_bytes: int | None = No
     return found
 
 
+def _passing(text: str) -> bool:
+    """A refusal or network hiccup that asking again can fix (not a private or removed video)."""
+    low = (text or "").lower()
+    return any(sign in low for sign in _PASSING_TROUBLE)
+
+
+def _pause(seconds: float, should_cancel: Callable[[], bool] | None) -> None:
+    """Wait before trying again, stopping at once if the job is cancelled."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if should_cancel is not None and should_cancel():
+            raise _load().utils.DownloadCancelled("cancelled")
+        time.sleep(min(0.25, max(0.0, end - time.monotonic())))
+
+
 def _empty(folder: Path) -> None:
     shutil.rmtree(folder, ignore_errors=True)
 
@@ -348,8 +370,10 @@ def download_link(url: str, folder: Path, *, max_height: int = 1080, max_bytes: 
     files: dict[str, tuple[float, float]] = {}
     state = {"best": 0.0, "too_big": False}
 
+    retries = 0
     try:
-        with yt_dlp.YoutubeDL(_options(max_height, folder)) as ydl:
+        ydl = yt_dlp.YoutubeDL(_options(max_height, folder))
+        try:
             info, resolved = _one_video(ydl, url)
             found = _describe(info, resolved)
             _refuse_if_unsuitable(found, max_bytes)
@@ -378,10 +402,31 @@ def download_link(url: str, folder: Path, *, max_height: int = 1080, max_bytes: 
                 if on_progress is not None:
                     on_progress(state["best"])
 
-            ydl.add_progress_hook(hook)
-            if should_cancel is not None and should_cancel():
-                raise yt_dlp.utils.DownloadCancelled("cancelled")
-            result = _extract(ydl, resolved, download=True)
+            while True:
+                try:
+                    if retries:   # fresh addresses; the partial file is continued
+                        ydl.close()
+                        ydl = yt_dlp.YoutubeDL(_options(max_height, folder))
+                        info, resolved = _one_video(ydl, url)
+                    ydl.add_progress_hook(hook)
+                    if should_cancel is not None and should_cancel():
+                        raise yt_dlp.utils.DownloadCancelled("cancelled")
+                    result = _extract(ydl, resolved, download=True)
+                    break
+                except LinkError as exc:
+                    said = str(exc.__cause__ or "") or exc.hint
+                    if not _passing(said):
+                        raise
+                    if retries >= len(RETRY_WAITS):
+                        raise LinkError(f"The site refused the download {retries + 1} times in a row, so it could not "
+                                        "be imported.", hint=f"It said: {said.strip()[:200]}. This happens with "
+                                        "YouTube now and then: try again in a few minutes, or choose a lower "
+                                        "quality.") from exc
+                    log.info("download refused part-way, trying again with fresh addresses: %s", said.strip()[:200])
+                    _pause(RETRY_WAITS[retries], should_cancel)
+                    retries += 1
+        finally:
+            ydl.close()
     except yt_dlp.utils.DownloadCancelled:
         if state["too_big"]:
             _empty(folder)
@@ -406,4 +451,6 @@ def download_link(url: str, folder: Path, *, max_height: int = 1080, max_bytes: 
             leftover.unlink(missing_ok=True)
     if on_progress is not None:
         on_progress(1.0)
-    return path, _describe(result, resolved)
+    details = _describe(result, resolved)
+    details.retries = retries
+    return path, details

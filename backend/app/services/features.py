@@ -26,6 +26,54 @@ def _item(key: str, area: str, name: str, status: str, detail: str) -> dict[str,
     return {"key": key, "area": area, "name": name, "status": status, "detail": detail}
 
 
+NEEDS = {
+    "youtube": "Built. Needs your own Google Cloud project with the YouTube Data API v3 and a Desktop OAuth client "
+               "(free), then Connect under Publishing → Accounts.",
+    "tiktok": "Built for drafts: clips go to your TikTok inbox and you finish the post in the TikTok app. Needs a "
+              "TikTok developer app with Login Kit (desktop) and the Content Posting API, then Connect.",
+    "instagram": "Built for Reels. Needs a professional Instagram account linked to a Facebook Page, your own Meta "
+                 "app, and a token from Meta's Graph API Explorer.",
+}
+PUBLISH_NAMES = {"youtube": ("publish_youtube", "YouTube Shorts upload"),
+                 "tiktok": ("publish_tiktok", "TikTok drafts (upload to inbox)"),
+                 "instagram": ("publish_instagram", "Instagram Reels publishing")}
+
+
+def _publishing(session: Session) -> list[dict[str, str]]:
+    """A platform counts as working only once it has confirmed a real post made from this PC."""
+    from ..models import Account, Post
+    from ..publishing import store
+
+    confirmed = ("published", "scheduled_on_platform", "private", "in_drafts")
+    items, total = [], 0
+    for platform, (key, name) in PUBLISH_NAMES.items():
+        done = session.query(Post).filter(Post.platform == platform, Post.status.in_(confirmed)).count()
+        total += done
+        connected = session.query(Account).filter(Account.platform == platform, Account.status == "connected").all()
+        label = store.LABELS[platform]
+        if done:
+            status, detail = "working", f"Confirmed by {label} for posts made from this PC ({done})."
+        elif connected:
+            status, detail = "needs_setup", (f"Connected as {', '.join(a.name for a in connected)}. Not tested with a "
+                                             "real post yet.")
+        elif store.app_summary(session, platform)["configured"]:
+            status, detail = "needs_setup", ("Your Meta app is set up: paste a token under Publishing → Accounts."
+                                             if platform == "instagram" else
+                                             "Your app is set up: press Connect under Publishing → Accounts.")
+        else:
+            status, detail = "needs_setup", NEEDS[platform]
+        items.append(_item(key, "Publishing", name, status, detail))
+    items.append(_item("publish_tiktok_direct", "Publishing", "TikTok direct posting", "blocked",
+                       "Not offered: TikTok's rules for direct posting exclude tools for posting to your own accounts, "
+                       "and apps it has not audited may only post privately. Drafts work instead."))
+    items.append(_item("scheduling", "Publishing", "Publishing queue, scheduler and calendar",
+                       "working" if total else "needs_setup",
+                       "Built, and confirmed by real posts from this PC." if total else
+                       "Built: the queue, calendar and scheduler run on this PC. Posts go out while ClipForge is "
+                       "running; YouTube schedules by itself. Connect an account to use it."))
+    return items
+
+
 def feature_status(session: Session) -> list[dict[str, Any]]:
     installed = models.installed_models()
     hw = hardware.detect()
@@ -108,15 +156,9 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               "Not built. It will use the official YouTube Data API with your own API key."),
         _item("automation", "Automation", "Automated workflows", "planned",
               "Not built. Batch processing through the queue works today."),
-        _item("publish_youtube", "Publishing", "YouTube Shorts upload", "planned",
-              "Not built. Needs your own Google Cloud OAuth client; uploads from unverified apps are private."),
-        _item("publish_tiktok", "Publishing", "TikTok publishing", "blocked",
-              "Not built, and blocked on TikTok: direct posting needs an app that has passed their audit."),
-        _item("publish_instagram", "Publishing", "Instagram Reels publishing", "blocked",
-              "Not built, and blocked on Meta: needs app review, a professional account and a public media URL."),
+        *_publishing(session),
         _item("manual_export", "Publishing", "Manual export with post text", "working",
               "Download a clip or export to a folder with title, description, hashtags and source details."),
-        _item("scheduling", "Publishing", "Scheduling calendar", "planned", "Not built."),
         _item("analytics", "Analytics", "Performance tracking", "planned",
               "Not built. No views or engagement numbers are shown anywhere until they come from a real source."),
         _item("strategist", "Analytics", "AI content strategist", "planned", "Not built."),

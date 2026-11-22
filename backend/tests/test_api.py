@@ -358,7 +358,7 @@ def test_features_are_reported_honestly(client: TestClient):
     by_name = {f["key"]: f for f in features}
 
     assert by_name["upload"]["status"] == "working"
-    assert by_name["publish_tiktok"]["status"] in ("planned", "blocked")
+    assert by_name["publish_tiktok_direct"]["status"] == "blocked"
     assert by_name["transcription"]["status"] == "needs_setup"          # no speech model in this test data folder
     assert all(f["status"] in ("working", "needs_setup", "unavailable", "blocked", "planned") and f["detail"]
                for f in features)
@@ -370,11 +370,9 @@ def test_nothing_unbuilt_is_presented_as_merely_needing_setup(client: TestClient
 
     before = statuses()
     assert before["youtube_url"] == "working"                         # link import is built (yt-dlp is installed)
-    for key in ("llm_pass", "diarization", "discovery", "automation", "publish_youtube", "scheduling",
-                "analytics", "strategist"):
+    for key in ("llm_pass", "diarization", "discovery", "automation", "analytics", "strategist"):
         assert before[key] == "planned", key
-    for key in ("publish_tiktok", "publish_instagram"):
-        assert before[key] == "blocked", key
+    assert before["publish_tiktok_direct"] == "blocked"
 
     # storing a key or choosing a provider does not bring an unbuilt feature any closer to working
     assert client.put("/api/settings/secret", json={"name": "youtube.api_key", "value": "not-a-real-key"}).status_code == 200

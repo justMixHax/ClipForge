@@ -24,7 +24,7 @@ from ..editing.fonts import available_fonts
 from ..editing.reframe import ASPECTS, LAYOUT_LABELS
 from ..errors import ClipForgeError, NotFound
 from ..jobs import queue
-from ..models import FEEDBACK_LABELS, Clip, Feedback, Job, Notification, Project, Video
+from ..models import FEEDBACK_LABELS, Account, Clip, Feedback, Job, Notification, Post, Project, Video
 from ..schemas import CleanupIn, ProjectIn, ProjectOut, ProjectPatch, SecretIn, SettingsIn
 from ..services import hardware, settings_store, storage
 from ..services.features import feature_status
@@ -246,9 +246,14 @@ def dashboard(session: Session = Depends(get_db)) -> dict:
                   "rejected": count(Clip, Clip.review_status == "rejected"),
                   "rendered": count(Clip, Clip.render_status == "ready"), "favorites": count(Clip, Clip.favorite),
                   "average_score": round(session.scalar(select(func.avg(Clip.score)).where(Clip.origin == "ai")) or 0, 1)},
-        # Publishing and analytics are not built yet. These stay empty rather than showing made-up numbers.
-        "publishing": {"connected_accounts": 0, "scheduled": 0, "published": 0, "verified_views": None,
-                       "note": "No social accounts are connected. Publishing and analytics are not built yet."},
+        # Counted from the post queue. Views are not read from the platforms yet (Analytics is not built), so
+        # they stay empty rather than showing made-up numbers.
+        "publishing": {"connected_accounts": count(Account, Account.status == "connected"),
+                       "scheduled": count(Post, Post.status.in_(("scheduled", "scheduled_on_platform"))),
+                       "published": count(Post, Post.status == "published"),
+                       "in_drafts": count(Post, Post.status == "in_drafts"),
+                       "failed": count(Post, Post.status == "failed"), "verified_views": None,
+                       "note": "Views and engagement are not read from the platforms yet."},
         "queue": {"waiting": count(Job, Job.status == "queued"), "running": count(Job, Job.status == "running"),
                   "failed_this_week": count(Job, Job.status == "failed", Job.created_at >= week)},
         "compute": {"analyze_seconds_7d": round(seconds["analyze"]), "render_seconds_7d": round(seconds["render"]),

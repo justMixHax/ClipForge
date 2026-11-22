@@ -75,16 +75,35 @@ Python dependency is pinned to an exact version in `backend/requirements.txt`, a
 dependencies are locked in `frontend/package-lock.json`. The speech models come from the `Systran`
 faster-whisper repositories on Hugging Face and the face detector from the OpenCV model zoo.
 
+## Publishing
+
+Built on 22 November 2026, to these rules:
+
+- **Official APIs and sign-in only**: YouTube Data API v3, TikTok Content Posting API, Instagram Graph API. No
+  passwords typed into ClipForge, no session cookies, no hidden browser automation.
+- **Sign-in comes back to this PC only.** YouTube returns you to `http://127.0.0.1:3000` and TikTok to
+  `http://127.0.0.1:3000/api/publishing/oauth/callback`, with a one-time code. Every sign-in carries a random
+  state that works once and for ten minutes, plus PKCE, so a code is no use to anyone else; a sign-in that did
+  not start in ClipForge is refused. Instagram uses a token you make for your own app in Meta's Graph API
+  Explorer; the backend exchanges it with your app secret.
+- **App secrets and tokens are stored encrypted** in the same store as other credentials (a random key
+  protected by Windows for your user account). They are never sent to the interface or written to logs, and
+  they travel to the platforms in request bodies and headers, never in web addresses. Disconnecting revokes
+  ClipForge's access where the platform allows it and deletes the stored sign-in.
+- **Nothing on this PC is exposed.** Every platform receives the clip straight from this PC (YouTube and TikTok
+  uploads, Instagram's resumable upload), so no public address is needed.
+- **A post is "Published" only when the platform says so.** Until then it is waiting, uploading or processing;
+  YouTube's own scheduling, private uploads and TikTok drafts are shown as what they are, failures with the
+  platform's own words.
+- **Safeguards**: only approved, rendered clips from a source whose right to post you recorded, checked again
+  just before sending; the same clip goes to the same account once unless you ask; at most the daily limit in
+  Settings per account in 24 hours; a passing failure is tried again twice, then reported.
+- **TikTok direct posting is not offered**: TikTok's rules for it exclude tools for posting to your own
+  accounts. ClipForge sends drafts to your inbox instead.
+
 ## Rules for the integrations that are not built yet
 
 These are requirements, written down now so they are not negotiable later:
-
-- **Official APIs and OAuth only.** No passwords typed into ClipForge, no session cookies, no hidden browser
-  automation to get around a platform's posting rules.
-- **Tokens are stored encrypted**, never sent to the interface, never written to logs, and every connected
-  account has a visible disconnect control that deletes them.
-- **A post is "published" only when the platform says so.** Until then it is "sending" or "failed", with the
-  platform's own error message.
 - **No fabricated numbers.** Analytics show only what a connected account returned or what you typed in, and
   each figure says which.
 - **Public media URLs.** Where a platform must fetch the video from a public address, ClipForge will stage

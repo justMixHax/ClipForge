@@ -401,3 +401,109 @@ def apply_second_opinion(picks: list[Highlight], review: Any, words: list[Word],
         highlight.rank = rank
     return merged, summary
 
+
+
+# ------------------------------------------------------------------------------------------ your own moments
+WORD_EDGE = 0.6  # the most ClipForge moves your start or end, to keep a word whole
+
+
+def _word_at(t: float, words: Sequence[Word]) -> Word | None:
+    """The word a cut at t would chop (same margins as the quality check), or None."""
+    return next((w for w in words if w.start + 0.06 < t < w.end - 0.06), None)
+
+
+def _covering(sentences: Sequence[Sentence], start: float, end: float) -> list[int]:
+    return [s.idx for s in sentences if s.end > start + 0.05 and s.start < end - 0.05]
+
+
+def moment_end(start: float, sentences: Sequence[Sentence], ctx: ScoringContext | None, *, min_len: float,
+               max_len: float, duration: float, post_roll: float = 0.25) -> float:
+    """Where a moment you started by hand ends when you did not say: at the end of a sentence inside your
+    length range, the one the local rules score highest (closest to the middle of the range on a tie), never
+    past the end of the video. Without any sentence ending there, the middle of the range."""
+    latest = min(duration, start + max_len)
+    target = start + (min_len + max_len) / 2
+    first = next((s.idx for s in sentences if s.end > start + 0.05), None)
+    candidates = [s for s in sentences if start + min_len <= s.end <= latest]
+    if not candidates or first is None:
+        return round(max(start + 0.5, min(latest, target)), 3)
+
+    def rank(s: Sentence) -> tuple[float, float]:
+        score = ctx.score(first, s.idx).score if ctx is not None and s.idx >= first else 0.0
+        return (-score, abs(s.end - target))
+
+    best = min(candidates, key=rank)
+    following = [s.start for s in sentences if s.idx > best.idx]
+    end = best.end + post_roll
+    if following:
+        end = min(end, max(best.end, following[0] - 0.05))
+    return round(min(end, latest), 3)
+
+
+def moment_highlight(words: list[Word], sentences: list[Sentence], audio: AudioFeatures | None,
+                     visual: VisualFeatures | None, options: HighlightOptions, *, start: float, end: float | None,
+                     pick: Any = None, duration: float, feedback: FeedbackProfile | None = None,
+                     video_title: str = "", creator: str = "") -> Highlight:
+    """A moment you picked, given the same treatment as one the engine found: the local 12-part breakdown and
+    evidence, a title, hook lines and hashtags. Your start is kept exactly. Without an end from you, the end is
+    Claude's (pick) when it fits your length, otherwise the one moment_end chooses. Claude's title, hook,
+    category and score are used when it gave them."""
+    ctx = None
+    if sentences:
+        ctx = ScoringContext(words, sentences, audio, visual,
+                             ScoreOptions(preset=options.preset, feedback=feedback,
+                                          niche_keywords=tuple(options.niche_keywords),
+                                          game_style=options.game_style, language=options.language,
+                                          pre_roll=options.pre_roll, post_roll=options.post_roll), duration)
+    moved: dict[str, dict[str, Any]] = {}
+    chopped = _word_at(start, words)
+    if chopped is not None and chopped.end - start <= WORD_EDGE:  # typed times are whole seconds: keep words whole
+        moved["start"] = {"by": round(chopped.end + 0.02 - start, 2), "word": chopped.text}
+        start = chopped.end + 0.02
+    end_from = "you"
+    if end is None and pick is not None and options.min_len <= pick.end - start <= options.max_len \
+            and pick.end <= duration + 0.05:
+        end, end_from = min(duration, float(pick.end)), "claude"
+    if end is None:
+        end, end_from = moment_end(start, sentences, ctx, min_len=options.min_len, max_len=options.max_len,
+                                   duration=duration), "forge"
+    chopped = _word_at(end, words)
+    if chopped is not None and chopped.end - end <= WORD_EDGE:
+        following = next((w.start for w in words if w.start >= chopped.end), None)
+        finish = chopped.end + 0.05 if following is None else min(chopped.end + 0.05, max(chopped.end, following - 0.02))
+        moved["end"] = {"by": round(finish - end, 2), "word": chopped.text}
+        end = finish
+    end = round(min(duration, end), 3)
+
+    inside = _covering(sentences, start, end)
+    full = ctx.score(inside[0], inside[-1], explain=True) if (ctx is not None and inside) else None
+    said = " ".join(w.text for w in words if w.start >= start - 0.05 and w.end <= end + 0.05 and w.text.strip())
+    evidence: list[dict[str, Any]] = [{"dimension": "entertainment", "impact": 0.0, "time": round(start, 2),
+                                       "quote": None, "text": "You picked this moment yourself."}]
+    if pick is not None:
+        title = pick.title or (said[:60] if said else f"Moment at {_clock(start)}")
+        hook = pick.hook or title
+        hooks = [hook] + ([title] if title != hook else [])
+        category, score = pick.category, float(pick.score)
+        reason = f"Claude: {pick.reason}" if pick.reason else "Claude named it."
+        evidence.append({"dimension": "entertainment", "impact": 0.0, "time": None, "quote": None, "text": reason})
+        confidence = 0.8
+    elif full is not None:
+        title = build_title(ctx, full)
+        hooks = build_hooks(ctx, full)
+        hook, category, score = hooks[0], full.category, full.score
+        reason, confidence = full.explanation, full.confidence
+    else:
+        title, hooks, hook = f"Moment at {_clock(start)}", [], ""
+        category, score, confidence = "action", 50.0, 0.3
+        reason = "Nothing is said here, so there is no automatic score: it rests on your choice."
+    if full is not None:
+        evidence += full.evidence
+    return Highlight(
+        start=round(start, 3), end=end, score=round(score, 1),
+        subscores=dict(full.subscores) if full is not None else {d: 50.0 for d in DIMENSIONS},
+        confidence=confidence, explanation=f"You picked this moment. {reason}".strip(), evidence=evidence,
+        category=category, title=title, hook_text=hook, hook_options=hooks,
+        hashtags=build_hashtags(category, options.preset, options.game_style, creator, f"{video_title} {said}"),
+        description=build_description(title, creator), transcript_text=said, rank=0, analysis_source="manual",
+        peak_time=round(full.peak_time if full is not None else start, 2), extra={"end_from": end_from, "moved": moved})

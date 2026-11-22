@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import PublishingStudio from "./pages/Publishing";
 import { Layout } from "./components/Layout";
 import { Empty } from "./components/ui";
 import Clipper from "./pages/Clipper";
@@ -19,7 +20,7 @@ export default function App() {
         <Route path="/editor/:clipId" element={<Editor />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/discovery" element={<Planned area="discovery" />} />
-        <Route path="/publishing" element={<Planned area="publishing" />} />
+        <Route path="/publishing" element={<PublishingStudio />} />
         <Route path="/analytics" element={<Planned area="analytics" />} />
         <Route path="/automation" element={<Planned area="automation" />} />
         <Route path="/strategist" element={<Planned area="strategist" />} />

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, query } from "./api";
 import type {
-  Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, SettingsBody, Video,
+  Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PublishOverview,
+  PublishPost, SettingsBody, Video,
 } from "./api";
 
 /** Refresh everything that can change when a job moves forward. */
@@ -107,5 +108,19 @@ export function usePatchClip() {
       client.invalidateQueries({ queryKey: ["clips"] });
       client.invalidateQueries({ queryKey: ["dashboard"] });
     },
+  });
+}
+
+export function usePublishing() {
+  return useQuery({ queryKey: ["publishing"], queryFn: () => api.get<PublishOverview>("/publishing"), refetchInterval: 5000 });
+}
+
+const MOVING = new Set(["publishing", "processing"]);
+
+export function usePosts() {
+  return useQuery({
+    queryKey: ["posts"],
+    queryFn: () => api.get<PublishPost[]>("/publishing/posts"),
+    refetchInterval: (state) => ((state.state.data ?? []).some((post) => MOVING.has(post.status)) ? 2000 : 8000),
   });
 }

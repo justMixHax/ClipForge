@@ -171,3 +171,70 @@ def test_this_pc_reports_which_runtime_youtube_links_will_use():
     found = downloader.js_runtime()
 
     assert found == "" or found.split()[0] in ("deno", "node")
+
+
+# ------------------------------------------------------------------ a download refused part-way is continued
+@pytest.fixture()
+def no_waiting(monkeypatch):  # noqa: ANN001
+    monkeypatch.setattr(downloader, "RETRY_WAITS", (0.0, 0.0, 0.0, 0.0))
+
+
+def test_a_download_the_site_refuses_once_is_tried_again_with_fresh_addresses(video_bytes: bytes, tmp_path: Path,
+                                                                               no_waiting):  # noqa: ANN001
+    """YouTube sometimes answers 403 part-way through a long download; asking again works."""
+    site = LocalSite(video_bytes, refuse={3})          # the third request is the download itself
+    try:
+        path, info = downloader.download_link(site.url("/clip.mp4"), tmp_path / "in")
+    finally:
+        site.close()
+
+    assert path.read_bytes() == video_bytes
+    assert info.retries == 1
+    assert site.gets > 3                                 # it looked at the link again, then downloaded
+
+
+def test_a_site_that_keeps_refusing_gives_up_after_a_few_tries_and_cleans_up(video_bytes: bytes, tmp_path: Path,
+                                                                             no_waiting):  # noqa: ANN001
+    site = LocalSite(video_bytes, refuse=set(range(3, 100)))
+    try:
+        with pytest.raises(LinkError) as failed:
+            downloader.download_link(site.url("/clip.mp4"), tmp_path / "in")
+    finally:
+        site.close()
+
+    assert "refused" in failed.value.message.lower() and "403" in (failed.value.message + failed.value.hint)
+    assert not (tmp_path / "in").exists() or list((tmp_path / "in").iterdir()) == []
+
+
+def test_a_refusal_while_only_looking_at_the_link_is_not_retried(video_bytes: bytes, no_waiting):  # noqa: ANN001
+    """A 403 on the page itself means the video is not available to us: asking again will not change that."""
+    site = LocalSite(video_bytes, refuse=set(range(1, 100)))
+    try:
+        with pytest.raises(LinkError):
+            downloader.inspect_link(site.url("/clip.mp4"))
+    finally:
+        site.close()
+
+    assert site.gets <= 2
+
+
+def test_cancelling_while_waiting_to_try_again_stops_at_once(video_bytes: bytes, tmp_path: Path, monkeypatch):  # noqa: ANN001
+    import time
+
+    monkeypatch.setattr(downloader, "RETRY_WAITS", (30.0, 30.0, 30.0, 30.0))
+    site = LocalSite(video_bytes, refuse=set(range(3, 100)))
+    started = time.monotonic()
+    calls = {"n": 0}
+
+    def cancel_after_the_first_refusal() -> bool:
+        calls["n"] += 1
+        return site.gets >= 3
+
+    try:
+        with pytest.raises(JobCancelled):
+            downloader.download_link(site.url("/clip.mp4"), tmp_path / "in", should_cancel=cancel_after_the_first_refusal)
+    finally:
+        site.close()
+
+    assert time.monotonic() - started < 10
+

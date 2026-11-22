@@ -136,12 +136,35 @@ def require_chatgpt_sign_in(cli: str, should_cancel: Callable[[], bool] | None =
 
 # ------------------------------------------------------------------------------------------- the prompt
 def build_prompt(sentences: Sequence[Sentence], picks: Sequence[Any], options, *, title: str,  # noqa: ANN001
-                 creator: str) -> str:
+                 creator: str, chosen_by_user: bool = False) -> str:
+    """The review request. For a moment the user chose themselves (chosen_by_user), ChatGPT only gives its verdict
+    on it, and only the transcript around it is sent."""
+    if chosen_by_user and picks:
+        first, last = min(p.start for p in picks) - 60, max(p.end for p in picks) + 30
+        sentences = [s for s in sentences if s.end >= first and s.start <= last]
     lines = [f"[{clock(s.start)}] {s.text}" for s in sentences]
     numbered = "\n".join(
         f"{n}. {clock(p.start)}-{clock(p.end)} \"{p.title}\" ({p.category}, score {p.score:.0f}): "
         f"{(p.explanation or '').replace('Picked by Claude: ', '')}" for n, p in enumerate(picks, 1)) or "(none)"
     by = f" by {creator}" if creator else ""
+    if chosen_by_user:
+        return f"""You are the second opinion in ClipForge, a tool that cuts long videos into short vertical clips for
+TikTok, YouTube Shorts and Instagram Reels. The moment below was chosen by the user while watching the video.
+Review it honestly. Work only from the text given here; do not run commands or open files.
+
+Video: "{title}"{by}.
+
+The moment:
+{numbered}
+
+Say "agree" if it would work as a short on its own (funny, surprising, tense, impressive or interesting, with its
+setup and payoff inside), or "disagree" if it would not, with one short reason. Do not suggest other moments.
+
+Answer with JSON only:
+{{"verdicts": [{{"pick": 1, "verdict": "agree", "reason": "one short sentence"}}], "additions": []}}
+
+Transcript around the moment, one line per sentence, with its start time:
+""" + "\n".join(lines)
     return f"""You are the second opinion in ClipForge, a tool that cuts long videos into short vertical clips for
 TikTok, YouTube Shorts and Instagram Reels. Another AI already picked the clips below from this video's
 transcript. Review them honestly. Work only from the text given here; do not run commands or open files.

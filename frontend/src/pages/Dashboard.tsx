@@ -1,4 +1,4 @@
-import { Download, Activity, CheckCircle2, Clapperboard, Cpu, Film, HardDrive, Hourglass, Link2Off, Sparkles, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, Clapperboard, Cpu, Download, Film, HardDrive, Hourglass, Link2Off, Scissors, Sparkles, XCircle } from "lucide-react";
 import { logOf, WorkLogLines } from "../components/WorkLog";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -41,10 +41,10 @@ function JobRow({ job }: { job: Job }) {
     <li className="py-2">
       <div className="flex items-center gap-3">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-raised text-faint">
-        {job.type === "analyze" ? <Sparkles className="h-3.5 w-3.5" /> : job.type === "import" ? <Download className="h-3.5 w-3.5" /> : <Clapperboard className="h-3.5 w-3.5" />}
+        {job.type === "analyze" ? <Sparkles className="h-3.5 w-3.5" /> : job.type === "import" ? <Download className="h-3.5 w-3.5" /> : job.type === "moment" ? <Scissors className="h-3.5 w-3.5" /> : <Clapperboard className="h-3.5 w-3.5" />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] text-ink">{job.type === "analyze" ? "Analysis" : job.type === "import" ? "Import from a link" : "Render"} #{job.id}{job.status === "running" && job.message ? ` · ${job.message}` : ""}</p>
+        <p className="truncate text-[13px] text-ink">{job.type === "analyze" ? "Analysis" : job.type === "import" ? "Import from a link" : job.type === "moment" ? "Your own moment" : "Render"} #{job.id}{job.status === "running" && job.message ? ` · ${job.message}` : ""}</p>
         {job.status === "running" ? <Progress value={job.progress} busy className="mt-1" /> : (
           <p className="truncate text-xs text-faint">{job.status === "failed" ? job.error : `${ago(job.finished_at ?? job.created_at)}${took !== null ? ` · took ${duration(took)}` : ""}`}</p>
         )}
@@ -177,8 +177,11 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Connected accounts" icon={<Link2Off className="h-4 w-4 text-faint" />} />
-            <p className="px-5 pb-5 text-[13px] text-muted">{d.publishing.note} Finished clips can be downloaded or exported with their post text today. <Link to="/publishing" className="text-accent-soft hover:underline">See what is planned.</Link></p>
+            <CardHeader title="Publishing" icon={<Link2Off className="h-4 w-4 text-faint" />} />
+            <div className="px-5 pb-5 text-[13px] text-muted">
+              <p><span className="tabular text-ink">{d.publishing.connected_accounts}</span> connected accounts · <span className="tabular text-ink">{d.publishing.scheduled}</span> scheduled · <span className="tabular text-ink">{d.publishing.published}</span> published{d.publishing.in_drafts ? <> · <span className="tabular text-ink">{d.publishing.in_drafts}</span> in TikTok drafts</> : null}{d.publishing.failed ? <> · <span className="tabular text-bad">{d.publishing.failed}</span> failed</> : null}</p>
+              <p className="mt-1">{d.publishing.note} <Link to="/publishing" className="text-accent-soft hover:underline">Open the Publishing Studio.</Link></p>
+            </div>
           </Card>
         </div>
       </div>

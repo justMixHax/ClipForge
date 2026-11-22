@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("worker started", extra={"worker_id": worker_id})
 
     last_recovery = 0.0
+    last_schedule = 0.0
     try:
         while not stop.is_set():
             now = time.monotonic()
@@ -82,6 +83,16 @@ def main(argv: list[str] | None = None) -> int:
                     recovered = queue.requeue_stale(s, STALE_SECONDS)
                 if recovered:
                     log.info("recovered interrupted jobs", extra={"count": recovered})
+            if now - last_schedule > 10:  # posts whose time has come, and follow-up checks on earlier ones
+                last_schedule = now
+                try:
+                    from ..publishing.service import enqueue_due
+                    with db.session_scope() as s:
+                        due = enqueue_due(s)
+                    if due:
+                        log.info("posts due", extra={"count": due})
+                except Exception:  # noqa: BLE001  (a scheduling hiccup must not stop the worker)
+                    log.warning("could not check scheduled posts", exc_info=True)
             with db.session_scope() as s:
                 job = queue.claim_next(s, worker_id)
                 job_id = job.id if job else None

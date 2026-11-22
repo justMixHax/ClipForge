@@ -258,3 +258,66 @@ class Notification(Base):
     link: Mapped[str] = mapped_column(String(300), default="")
     read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+# --- publishing --------------------------------------------------------------------------------------
+PLATFORMS = ("youtube", "tiktok", "instagram")
+# scheduled: waiting for its time (or to be uploaded) · publishing: ClipForge is uploading it
+# processing: the platform accepted the file and is still working on it · published: the platform confirmed it is live
+# scheduled_on_platform: uploaded, and the platform itself publishes it at the chosen time (YouTube)
+# private: uploaded and confirmed, visible only to you · in_drafts: waiting in your TikTok inbox for you to post
+# failed · cancelled
+POST_STATUSES = ("scheduled", "publishing", "processing", "published", "scheduled_on_platform", "private", "in_drafts",
+                 "failed", "cancelled")
+
+
+class Account(Base):
+    """A social account connected through the platform's own sign-in. Its tokens are kept encrypted in secrets
+    (name "publish.account.<id>") and never leave the backend."""
+
+    __tablename__ = "accounts"
+    __table_args__ = (Index("ix_accounts_platform_external", "platform", "external_id", unique=True),
+                      {"sqlite_autoincrement": True})
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    external_id: Mapped[str] = mapped_column(String(100))  # channel id, TikTok open_id, Instagram user id
+    name: Mapped[str] = mapped_column(String(200), default="")
+    handle: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(20), default="connected")  # connected | needs_reconnect
+    detail: Mapped[str] = mapped_column(Text, default="")
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reconnect_by: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)  # when the sign-in runs out
+    extra: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    connected_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+
+
+class Post(Base):
+    """One clip going to one account. It only counts as published once the platform has confirmed it."""
+
+    __tablename__ = "posts"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    clip_id: Mapped[int | None] = mapped_column(ForeignKey("clips.id", ondelete="SET NULL"), index=True)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id", ondelete="SET NULL"), index=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(24), default="scheduled", index=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)  # when it should go live
+    next_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None, index=True)  # when ClipForge acts next
+    title: Mapped[str] = mapped_column(String(300), default="")
+    caption: Mapped[str] = mapped_column(Text, default="")
+    hashtags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    privacy: Mapped[str] = mapped_column(String(32), default="")
+    options: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    external_id: Mapped[str] = mapped_column(String(200), default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[str] = mapped_column(Text, default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    clip_title: Mapped[str] = mapped_column(String(300), default="")      # kept if the clip is deleted later
+    account_name: Mapped[str] = mapped_column(String(200), default="")    # kept if the account is disconnected
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)

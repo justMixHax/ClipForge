@@ -125,6 +125,47 @@ Transcript, one line per sentence, with its start time (h:mm:ss or m:ss):
 """ + "\n".join(lines)
 
 
+def build_moment_prompt(sentences: Sequence[Sentence], options, *, start: float, end: float | None,  # noqa: ANN001
+                        title: str, creator: str, game: str, duration: float) -> str:
+    """For a moment the user chose: Claude keeps the user's times, finds the end when there is none, and names
+    it. Only the transcript around the moment is sent."""
+    last = (end if end is not None else start + options.max_len) + 30
+    lines = [f"[{clock(s.start)}] {s.text}" for s in sentences if s.end >= start - 60 and s.start <= last]
+    by = f" by {creator}" if creator else ""
+    playing = f" (game: {game})" if game else ""
+    if end is None:
+        task = (f"The user watched the video and chose a moment that starts at {start:.1f} seconds ({clock(start)}). "
+                "The start is fixed: do not move it. Decide where the clip ends: right after the payoff or punchline, "
+                f"at the end of a line, between {start + options.min_len:.1f} and {start + options.max_len:.1f} "
+                "seconds.")
+        end_field = "END"
+        end_note = "END is the end you chose, in seconds from the start of the video."
+    else:
+        task = (f"The user watched the video and chose a moment from {start:.1f} to {end:.1f} seconds "
+                f"({clock(start)} to {clock(end)}). Both times are fixed: do not move them.")
+        end_field = f"{end:.1f}"
+        end_note = "Times are in seconds from the start of the video."
+    return f"""You are the clip picker of ClipForge, a tool that cuts long videos into short vertical clips for
+TikTok, YouTube Shorts and Instagram Reels.
+
+Video: "{title}"{by}{playing}, {clock(duration)} long.
+
+{task}
+Then name the clip: a short catchy title, an on-screen hook line, a category and an honest 0-100 score for how
+likely it is to work as a short (an estimate, not a promise), with one sentence on why.
+
+Rules: never invent words, quotes or events: the title and hook must reflect what is really said. Category is
+one of: {', '.join(CATEGORY_LABELS)}.
+
+Answer with JSON only, in this shape:
+{{"picks": [{{"start": {start:.1f}, "end": {end_field}, "title": "short catchy title", "hook": "on-screen line, max 12 words",
+"category": "funny", "score": 80, "reason": "one sentence on why this works"}}]}}
+{end_note}
+
+Transcript around the moment, one line per sentence, with its start time (h:mm:ss or m:ss):
+""" + "\n".join(lines)
+
+
 # ----------------------------------------------------------------------------------------- the answer
 def _explain(text: str) -> ClaudeUnavailable:
     low = text.lower()

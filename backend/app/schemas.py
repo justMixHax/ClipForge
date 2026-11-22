@@ -155,6 +155,21 @@ class AnalyzeIn(Strict):
         return value
 
 
+class MomentIn(Strict):
+    """A moment you chose. Times can be typed (1:02:15, 62:15, 3735, 1h2m15s) or pasted as a link shared at
+    that moment. Without an end, ClipForge finds one inside your clip length."""
+    start: float | str = Field(..., description="When the moment starts")
+    end: float | str | None = Field(None, description="When it ends (optional)")
+    options: AnalyzeIn | None = None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _short_text(cls, value: float | str | None) -> float | str | None:
+        if isinstance(value, str) and len(value) > 500:
+            raise ValueError("too long to be a time or a link")
+        return value
+
+
 class ImportUrlIn(Strict):
     url: str = Field(min_length=1, max_length=4000)
     permission_status: Permission    # required: an import does not start until you say why you may clip it

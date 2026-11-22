@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { ClipCard, ClipViewer, RightsBadge, SourcePeek, useClipActions } from "../components/clips";
 import { JobStages } from "../components/JobStages";
 import { LinkImport } from "../components/LinkImport";
+import { MomentClip, type MomentTimes } from "../components/MomentClip";
 import { VideoWorkLog } from "../components/WorkLog";
 import { ProjectSelect } from "../components/projects";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Field, Input, Progress, Segmented, Select, Switch, useToast } from "../components/ui";
@@ -297,6 +298,7 @@ export default function Clipper() {
   const [peek, setPeek] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<unknown>(null);
+  const [moment, setMoment] = useState<MomentTimes>({ start: "", end: "" });
 
   // Start from the defaults saved in Settings, once.
   useEffect(() => {
@@ -313,6 +315,7 @@ export default function Clipper() {
 
   const myJobs = useMemo(() => (jobs.data ?? []).filter((job) => job.video_id === videoId), [jobs.data, videoId]);
   const analysis = myJobs.find((job) => job.type === "analyze") ?? null;
+  const momentJobs = myJobs.filter((job) => job.type === "moment");
   const renderJobs = useMemo(() => new Map<number, Job>(myJobs.filter((j) => j.type === "render" && j.clip_id).map((j) => [j.clip_id as number, j])), [myJobs]);
   const clips = useClips({ video_id: videoId, sort: "rank" }, videoId !== null);
 
@@ -329,6 +332,7 @@ export default function Clipper() {
   const pick = (v: Video | null) => {
     setFilter("all");
     setStartError(null);
+    setMoment({ start: "", end: "" });
     setParams(v ? { video: String(v.id) } : {});
   };
 
@@ -409,6 +413,11 @@ export default function Clipper() {
             {all.length > 0 && !analysis && <p className="text-center text-xs text-faint">Suggestions you have not touched are replaced. Approved, rejected, edited and favourite clips are kept.</p>}
           </div>
         </Card>
+
+        {video.data && (
+          <MomentClip video={video.data} times={moment} onTimes={setMoment} analyzeBody={analyzeBody} jobs={momentJobs}
+            onWatch={setPeek} claudeOn={settings.data?.values["ai.engine"] === "claude"} onQueued={refresh} />
+        )}
       </div>
 
       <div className="min-w-0 space-y-4">
@@ -464,7 +473,8 @@ export default function Clipper() {
 
       <ClipViewer clip={viewed} options={options.data} onClose={() => setViewing(null)} onPeek={setPeek} />
       {videoId !== null && <div className="xl:col-start-2"><VideoWorkLog videoId={videoId} /></div>}
-      <SourcePeek videoId={videoId} time={peek} title={video.data?.title} onClose={() => setPeek(null)} />
+      <SourcePeek videoId={videoId} time={peek} title={video.data?.title} onClose={() => setPeek(null)} marks={moment}
+        onMark={(which, seconds) => setMoment((current) => ({ ...current, [which]: clock(seconds, true) }))} />
     </div>
   );
 }

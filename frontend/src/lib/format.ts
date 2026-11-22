@@ -64,3 +64,34 @@ export const FEEDBACK_LABELS: Record<string, string> = {
   not_entertaining: "Not entertaining",
   too_much_context: "Needs too much context",
 };
+
+function plainTime(text: string): number | null {
+  const t = text.trim().toLowerCase().replace(",", ".");
+  if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+  if (/^\d+(:\d{1,2}){1,2}(\.\d+)?$/.test(t)) {
+    const parts = t.split(":").map(Number);
+    if (parts.length === 2) return parts[1] >= 60 ? null : parts[0] * 60 + parts[1];
+    return parts[1] >= 60 || parts[2] >= 60 ? null : parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  const units = /^(?:(\d+(?:\.\d+)?)h)?\s*(?:(\d+(?:\.\d+)?)m)?\s*(?:(\d+(?:\.\d+)?)s)?$/.exec(t);
+  if (units && (units[1] || units[2] || units[3])) return Number(units[1] ?? 0) * 3600 + Number(units[2] ?? 0) * 60 + Number(units[3] ?? 0);
+  return null;
+}
+
+/** Seconds from a time as people write it (1:02:15, 62:15, 3735, 1h2m15s) or from a link shared at a moment
+ *  (?t=…). Null when it is not one. Only for showing what was understood: the server reads it again. */
+export function parseTime(text: string): number | null {
+  const value = text.trim();
+  if (!value) return null;
+  if (/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(:\d+)?([/?#]|$)/i.test(value)) {
+    try {
+      const url = new URL(value.includes("://") ? value : `https://${value}`);
+      const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const raw = url.searchParams.get("t") ?? url.searchParams.get("start") ?? url.searchParams.get("time_continue") ?? hash.get("t");
+      return raw === null ? null : plainTime(raw);
+    } catch {
+      return null;
+    }
+  }
+  return plainTime(value);
+}

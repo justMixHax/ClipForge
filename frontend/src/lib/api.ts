@@ -93,7 +93,7 @@ export interface Stage {
 
 export interface Job {
   id: number;
-  type: "analyze" | "render" | "import" | string;
+  type: "analyze" | "render" | "import" | "moment" | string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   priority: number;
   progress: number;
@@ -423,7 +423,7 @@ export interface StorageUsage {
 export interface Dashboard {
   videos: { total: number; analyzed: number; hours: number };
   clips: { total: number; awaiting_review: number; approved: number; rejected: number; rendered: number; favorites: number; average_score: number };
-  publishing: { connected_accounts: number; scheduled: number; published: number; verified_views: number | null; note: string };
+  publishing: { connected_accounts: number; scheduled: number; published: number; in_drafts: number; failed: number; verified_views: number | null; note: string };
   queue: { waiting: number; running: number; failed_this_week: number };
   compute: { analyze_seconds_7d: number; render_seconds_7d: number; jobs_7d: number };
   top_clips: Clip[];
@@ -456,4 +456,62 @@ export interface SearchHit {
   text: string;
   clip_start: number;
   clip_end: number;
+}
+
+// -------------------------------------------------------------------------------------------- publishing
+export type PlatformKey = "youtube" | "tiktok" | "instagram";
+export type PostStatus = "scheduled" | "publishing" | "processing" | "published" | "scheduled_on_platform" | "private" | "in_drafts" | "failed" | "cancelled";
+
+export interface PublishPlatform {
+  platform: PlatformKey;
+  label: string;
+  connect: "sign_in" | "token";
+  redirect_uri: string;
+  configured: boolean;
+  client_id: string;
+}
+
+export interface PublishAccount {
+  id: number;
+  platform: PlatformKey;
+  label: string;
+  name: string;
+  handle: string;
+  status: "connected" | "needs_reconnect";
+  detail: string;
+  reconnect_by: string | null;
+  connected_at: string;
+  extra: { page?: string; avatar_url?: string };
+}
+
+export interface PublishOverview {
+  platforms: PublishPlatform[];
+  accounts: PublishAccount[];
+  daily_limit: number;
+}
+
+export interface PublishPost {
+  id: number;
+  clip_id: number | null;
+  account_id: number | null;
+  platform: PlatformKey;
+  label: string;
+  status: PostStatus;
+  scheduled_at: string | null;
+  next_run_at: string | null;
+  title: string;
+  caption: string;
+  hashtags: string[];
+  privacy: string;
+  options: Record<string, unknown>;
+  external_id: string;
+  url: string;
+  detail: string;
+  error: string;
+  attempts: number;
+  clip_title: string;
+  account_name: string;
+  created_at: string;
+  published_at: string | null;
+  thumb_url: string;
 }

@@ -25,7 +25,8 @@ from .. import db
 from ..analysis.audio import AudioFeatures, compute_audio_features
 from ..analysis.dedupe import ExistingClip
 from ..analysis import chatgpt_review, claude_review
-from ..analysis.engine import HighlightOptions, apply_second_opinion, find_highlights, highlights_from_picks
+from ..analysis.engine import (HighlightOptions, apply_second_opinion, find_highlights, highlights_from_picks,
+                               moment_highlight)
 from ..analysis.feedback import FeedbackProfile
 from ..analysis.lexicon import content_tokens
 from ..analysis.presets import CONTENT_PRESETS, LENGTH_RANGES
@@ -63,6 +64,11 @@ STAGES: dict[str, list[tuple[str, str, int]]] = {
                ("encode", "Rendering video", 77), ("checks", "Checking the export", 12)],
     "import": [("inspect", "Checking the link", 4), ("download", "Downloading the video", 88),
                ("register", "Adding it to your library", 8)],
+    "moment": [("audio", "Extracting audio", 3), ("transcribe", "Transcribing speech", 62),
+               ("review", "Claude is finishing your clip", 20), ("second", "ChatGPT is checking it", 12),
+               ("save", "Saving your clip", 3)],
+    "publish": [("prepare", "Checking the post", 5), ("upload", "Uploading", 80),
+                ("confirm", "Waiting for the platform to confirm", 15)],
 }
 
 
@@ -351,25 +357,14 @@ def build_post_kit(clip: Clip, video: Video) -> str:
 
 
 # ---------------------------------------------------------------------------------------------- analyse
-def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
-    opts = AnalyzeOptions.from_payload(job["payload"].get("options"))
-    with db.session_scope() as s:
-        video = s.get(Video, job["video_id"])
-        if video is None:
-            raise NotFound("This video no longer exists")
-        job["previous_status"] = video.status
-        video.status, video.last_error = "analyzing", ""
-        s.flush()
-        s.expunge(video)
-    source = storage.video_source_path(video)
-    work = storage.video_work_dir(video)
-    timing: dict[str, float] = {}
+def _transcript(ctx: JobContext, video: Video, source: Path, work: Path, language_option: str | None,
+                timing: dict[str, float]) -> tuple[list[Word], str, str, str]:
+    """Extract the audio and transcribe it, or reuse what an earlier job saved. Shared by the analysis and by
+    clips made from your own timestamps. Returns (words, language, transcriber signature, note)."""
     note = ""
     words: list[Word] = []
     language = ""
     signature = ""
-
-    # ---- audio + transcript ---------------------------------------------------------------------
     if video.has_audio:
         wav = work / "audio.wav"
         marker = work / "audio.ok"
@@ -390,7 +385,7 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                 saved = json.loads(transcript_file.read_text(encoding="utf-8"))
             except ValueError:
                 saved = None
-        wanted_language = opts.language or "auto"
+        wanted_language = language_option or "auto"
         try:
             with db.session_scope() as s:
                 transcriber, model_signature, device = load_transcriber(s)
@@ -412,7 +407,7 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         else:
             ctx.start("transcribe")
             started = time.monotonic()
-            result = transcribe_wav(wav, transcriber, TranscribeOptions(language=opts.language),
+            result = transcribe_wav(wav, transcriber, TranscribeOptions(language=language_option),
                                     checkpoint_path=work / "transcript.partial.json", signature=signature,
                                     on_progress=lambda f: ctx.progress(f, f"Transcribing speech ({f:.0%})"),
                                     should_cancel=ctx.cancelled)
@@ -436,6 +431,25 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         ctx.skip("audio", "This video has no audio track")
         ctx.skip("transcribe", "No audio to transcribe")
         note = "This video has no audio track, so it was analysed from the picture alone."
+    return words, language, signature, note
+
+
+def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
+    opts = AnalyzeOptions.from_payload(job["payload"].get("options"))
+    with db.session_scope() as s:
+        video = s.get(Video, job["video_id"])
+        if video is None:
+            raise NotFound("This video no longer exists")
+        job["previous_status"] = video.status
+        video.status, video.last_error = "analyzing", ""
+        s.flush()
+        s.expunge(video)
+    source = storage.video_source_path(video)
+    work = storage.video_work_dir(video)
+    timing: dict[str, float] = {}
+
+    # ---- audio + transcript ---------------------------------------------------------------------
+    words, language, signature, note = _transcript(ctx, video, source, work, opts.language, timing)
 
     # ---- signals ---------------------------------------------------------------------------------
     ctx.start("signals")
@@ -624,6 +638,144 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     return {"clips": len(highlights), "words": len(words), "note": note, "timing": timing}
 
 
+# --------------------------------------------------------------------------------------- your own moments
+def enqueue_moment(session: Session, video: Video, *, start: float, end: float | None,
+                   options: dict[str, Any] | None = None) -> Job:
+    """Queue a clip from a moment you chose. Asking again for the same start while it waits returns that job."""
+    payload = {"start": round(float(start), 3), "end": None if end is None else round(float(end), 3),
+               "options": dict(options or {})}
+    return queue.enqueue(session, "moment", payload, video_id=video.id, priority=8, stages=stage_list("moment"),
+                         target=("moment", f"{video.id}@{payload['start']:.1f}"))
+
+
+def _moment(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
+    """The same work as for a moment the AI found, for one you chose: transcript, end point, title, hook and score
+    (Claude, or the local rules), ChatGPT's verdict, then the render. Your start is never moved."""
+    payload = job["payload"]
+    opts = AnalyzeOptions.from_payload(payload.get("options"))
+    start = float(payload["start"])
+    wanted_end = None if payload.get("end") is None else float(payload["end"])
+    with db.session_scope() as s:
+        video = s.get(Video, job["video_id"])
+        if video is None:
+            raise NotFound("This video no longer exists")
+        s.expunge(video)
+        cfg = settings_store.get_all(s)
+        feedback = FeedbackProfile.from_labels(
+            (f.label, (f.snapshot or {}).get("category", "")) for f in s.scalars(select(Feedback)))
+    if start >= video.duration:
+        raise ClipForgeError(f"Your moment starts at {_clock(start)}, but the video is only {_clock(video.duration)} long.")
+    source = storage.video_source_path(video)
+    work = storage.video_work_dir(video)
+    timing: dict[str, float] = {}
+    words, language, _signature, note = _transcript(ctx, video, source, work, opts.language, timing)
+    sentences = build_sentences(words)
+    audio = AudioFeatures.load(work / "audio.npz") if (work / "audio.npz").exists() else None
+    visual = VisualFeatures.load(work / "visual.npz") if (work / "visual.npz").exists() else None
+    options = HighlightOptions(count=1, min_len=opts.min_len, max_len=opts.max_len, min_score=0.0,
+                               preset=opts.content_preset, game_style=opts.game_style,
+                               niche_keywords=tuple(cfg["niche.keywords"]), language=language or "en")
+    reach = wanted_end if wanted_end is not None else start + opts.max_len
+    spoken = any(s.end > start and s.start < reach for s in sentences)
+
+    # ---- Claude finds the end (when you gave none) and names it ----------------------------------------
+    pick = None
+    if cfg["ai.engine"] != "claude":
+        ctx.skip("review", "Local rules only (Settings)")
+    elif not spoken:
+        ctx.skip("review", "Nothing is said in your moment, so the local rules finished it")
+    else:
+        ctx.start("review")
+        started = time.monotonic()
+        prompt = claude_review.build_moment_prompt(sentences, options, start=start, end=wanted_end, title=video.title,
+                                                   creator=video.creator_name, game=opts.game_style,
+                                                   duration=video.duration)
+        try:
+            pick = claude_review.ask_claude(prompt, model=str(cfg["ai.claude_model"]), should_cancel=ctx.cancelled)[0]
+            ctx.note(f"Claude ({cfg['ai.claude_model']}) finished it")
+        except claude_review.ClaudeUnavailable as exc:
+            reason = exc.message.split(",")[0].rstrip(".")
+            log.warning("Claude unavailable for a moment: %s", exc.message)
+            ctx.note("Not used: " + reason)
+            ctx.say("claude", f"Could not help: {reason}. Forge named your moment instead.")
+            note = f"{reason}, so Forge named your moment." + (f" {exc.hint}" if exc.hint else "")
+        timing["review"] = round(time.monotonic() - started, 1)
+
+    highlight = moment_highlight(words, sentences, audio, visual, options, start=start, end=wanted_end, pick=pick,
+                                 duration=video.duration, feedback=feedback, video_title=video.title,
+                                 creator=video.creator_name)
+    end_from = highlight.extra.get("end_from")
+    for side, shift in (highlight.extra.get("moved") or {}).items():
+        word = shift["word"].strip(".,!?;:")
+        ctx.say("forge", f"Moved your {side} {shift['by']:.1f} s later so it does not cut into “{word}”.")
+    if pick is not None:
+        if end_from == "claude":
+            ctx.say("claude", f"Ended your moment at {_clock(highlight.end)}, right after the payoff, and named it "
+                              f"“{highlight.title}”.")
+        else:
+            ctx.say("claude", f"Named your moment “{highlight.title}” and scored it {highlight.score:.0f}.")
+    if end_from == "forge":
+        why = " because Claude's end did not fit your length" if pick is not None else ""
+        ctx.say("forge", f"Ended your moment at {_clock(highlight.end)}, at the end of a sentence{why}.")
+
+    # ---- ChatGPT's verdict (nothing is added: this is your moment) -------------------------------------
+    if cfg["ai.engine"] != "claude":
+        ctx.skip("second", "Local rules only: nothing leaves this PC")
+    elif cfg["ai.second_opinion"] != "chatgpt":
+        ctx.skip("second", "Off in Settings")
+    elif not highlight.transcript_text:
+        ctx.skip("second", "Nothing is said in your moment")
+    else:
+        ctx.start("second")
+        started = time.monotonic()
+        prompt = chatgpt_review.build_prompt(sentences, [highlight], options, title=video.title,
+                                             creator=video.creator_name, chosen_by_user=True)
+        try:
+            review = chatgpt_review.ask_chatgpt(prompt, model=str(cfg["ai.chatgpt_model"]),
+                                                should_cancel=ctx.cancelled)
+            review.additions = []
+            (highlight,), _summary = apply_second_opinion(
+                [highlight], review, words, sentences, audio, visual, options, duration=video.duration,
+                feedback=feedback, video_title=video.title, creator=video.creator_name)
+            verdict = review.verdicts.get(1)
+            if verdict:
+                kind, why = verdict
+                line = f"Checked your moment and {'agreed' if kind == 'agree' else 'disagreed'}" + (f": {why}" if why else "")
+                ctx.say("chatgpt", line if line.endswith((".", "!", "?")) else line + ".")
+            else:
+                ctx.say("chatgpt", "Looked at your moment but gave no verdict.")
+        except chatgpt_review.ChatGPTUnavailable as exc:
+            log.warning("ChatGPT unavailable for a moment: %s", exc.message)
+            ctx.note("Not used: " + exc.message.split(",")[0])
+            ctx.say("chatgpt", f"Could not check your moment: {exc.message.split(',')[0].rstrip('.')}.")
+        except JobCancelled:
+            raise
+        except Exception:  # noqa: BLE001  (an optional second opinion must never cost you the clip)
+            log.warning("ChatGPT check of a moment failed", exc_info=True)
+            ctx.say("chatgpt", "Could not check your moment: something unexpected went wrong.")
+        timing["second"] = round(time.monotonic() - started, 1)
+
+    # ---- save and render ---------------------------------------------------------------------------
+    ctx.start("save")
+    settings = opts.clip_settings()
+    settings["captions"]["censor"] = bool(cfg["captions.censor"])
+    with db.session_scope() as s:
+        clip = Clip(video_id=video.id, project_id=video.project_id, storage_key=storage.new_key(), origin="manual",
+                    title=highlight.title[:300], hook_text=highlight.hook_text[:300], hook_options=highlight.hook_options,
+                    description=highlight.description, hashtags=highlight.hashtags, category=highlight.category,
+                    transcript_text=highlight.transcript_text, start=highlight.start, end=highlight.end,
+                    score=highlight.score, subscores=highlight.subscores, confidence=highlight.confidence,
+                    explanation=highlight.explanation, evidence=highlight.evidence, analysis_source="manual", rank=0,
+                    settings=settings)
+        s.add(clip)
+        s.flush()
+        enqueue_render(s, clip, priority=8)
+        clip_id = clip.id
+    ctx.say("forge", f"Saved your clip from {_clock(highlight.start)} to {_clock(highlight.end)} "
+                     f"({highlight.end - highlight.start:.0f} s) and started rendering it.")
+    return {"clip_id": clip_id, "note": note, "timing": timing}
+
+
 def get_clip_dir(clip: Clip) -> Path:
     from ..config import get_settings
     return get_settings().clips_dir / clip.storage_key
@@ -799,7 +951,10 @@ def _import(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         raise
     size = path.stat().st_size if path.exists() else 0
     ctx.say("forge", f"Downloaded “{title}”" + (f" from {found.site}" if found.site and found.site != "Generic" else "")
-                     + f" ({size / 1024**2:.0f} MB, {_clock(info.duration)}) and added it to your library"
+                     + f" ({size / 1024**2:.0f} MB, {_clock(info.duration)})"
+                     + (f", continuing after {found.retries} refusal{'s' if found.retries != 1 else ''} part-way,"
+                        if found.retries else "")
+                     + " and added it to your library"
                      + (", then queued it to find clips." if payload.get("analyze") else "."))
     log.info("video imported from a link", extra={"video_id": video_id, "site": found.site,
                                                   "seconds": round(info.duration, 1)})
@@ -807,7 +962,12 @@ def _import(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             "note": f"Imported “{title}”"}
 
 
-HANDLERS = {"analyze": _analyze, "render": _render, "import": _import}
+def _publish(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
+    from ..publishing.service import run_publish  # imported here: publishing builds on this module
+    return run_publish(ctx, job)
+
+
+HANDLERS = {"analyze": _analyze, "render": _render, "import": _import, "moment": _moment, "publish": _publish}
 
 
 def _record_failure(job: dict[str, Any], message: str) -> None:
@@ -824,6 +984,16 @@ def _record_failure(job: dict[str, Any], message: str) -> None:
                 notify(s, "job_failed", f"Rendering failed for “{clip.title}”", message, f"/editor/{clip.id}")
         elif job["type"] == "import":
             notify(s, "job_failed", "A video could not be imported from its link", message, "/clipper")
+        elif job["type"] == "publish":
+            from ..models import Post
+            post = s.get(Post, int((job.get("payload") or {}).get("post_id") or 0))
+            if post is not None and post.status == "publishing":  # stopped by something the job did not expect
+                post.status, post.error, post.next_run_at = "failed", message, None
+                notify(s, "job_failed", f"A post failed: “{post.clip_title}”", message, "/publishing")
+        elif job["type"] == "moment":
+            at = _clock(float((job.get("payload") or {}).get("start") or 0))
+            notify(s, "job_failed", f"Your moment at {at} could not be made into a clip", message,
+                   f"/clipper?video={job.get('video_id')}")
 
 
 def _record_cancel(job: dict[str, Any]) -> None:
@@ -838,6 +1008,15 @@ def _record_cancel(job: dict[str, Any]) -> None:
             if clip is not None:
                 clip.render_status = job.get("previous_render_status", "none")
                 storage.remove_file(get_clip_dir(clip) / "clip.rendering.mp4")
+        elif job["type"] == "publish":
+            from ..db import utcnow
+            from ..models import Post
+            post = s.get(Post, int((job.get("payload") or {}).get("post_id") or 0))
+            if post is not None and post.status in ("publishing", "scheduled"):
+                if SHUTDOWN.is_set():  # the app is closing: carry on from the saved upload next time
+                    post.status, post.next_run_at = "scheduled", utcnow()
+                else:
+                    post.status, post.next_run_at, post.detail = "cancelled", None, "Cancelled while uploading."
 
 
 def run_job(job_id: int) -> None:

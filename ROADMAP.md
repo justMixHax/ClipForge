@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 21 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
+Status as of 22 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
 marked done because the code merely exists.
 
 | Mark | Meaning |
@@ -44,6 +44,7 @@ marked done because the code merely exists.
 |---|---|---|
 | Timeline editor | 🟡 | Trim both ends on a waveform with snapping to word gaps, undo and redo. Cutting a section out of the middle by hand is not built (automatic pause tightening is) |
 | Caption editor | ✅ | Every word: text, emphasis, hide; style, font, colours, size, position |
+| Clips from your own timestamps | ✅ | A start typed, marked in the player or pasted as a link with `?t=`; an optional end. Claude ends it after the payoff and names it (or the local rules do), ChatGPT gives its verdict, then captions, render and checks. A start or end inside a word moves to its edge |
 | Cropping and reframing | 🟡 | Four layouts, subject position, zoom, facecam box, automatic face finding. The crop is fixed for the clip and has only been checked on synthetic footage |
 | Editing presets | 🟡 | Six built-in workflows and four content presets. Saving your own is not built |
 | Batch processing | ✅ | Batch approve, reject, render, export, delete; several videos queue up |
@@ -60,17 +61,23 @@ marked done because the code merely exists.
 | Import from a link | ✅ | Public videos from YouTube, Twitch, Kick and most video sites, through yt-dlp. No sign-in, no cookies. Your right to clip is asked before anything is downloaded, and an import can go straight on to finding clips |
 | Automated processing workflows | ⬜ | The queue and "render straight away" exist; rules that start jobs by themselves do not |
 
-## Milestone 5 · Social publishing — not started
+## Milestone 5 · Social publishing — built, waiting for your accounts
+
+Built on 22 November 2026 from each platform's documentation as it stood that month, and tested against local
+stand-ins of the three APIs. Not yet tried against the real platforms: that needs your own developer app and
+sign-in on each (Publishing Studio → Accounts). Each line below moves to ✅ after its first confirmed real post.
 
 | Deliverable | | Notes |
 |---|---|---|
-| Manual export with post text | ✅ | The working alternative today |
-| YouTube Shorts upload | ⬜ | Needs your own Google Cloud project and OAuth client. Until Google has audited that project, uploads made through the API stay private |
-| TikTok posting | 🔒 | Direct posting needs a developer app that has passed TikTok's audit; unaudited apps can only post privately |
-| Instagram Reels posting | 🔒 | Needs a Meta app that has passed review, a professional account, and a public address for the video file |
-| Publishing queue, scheduler, calendar | ⬜ | |
-| Approval before posting | 🟡 | Approve and reject exist for review; nothing is ever posted, so there is nothing yet to gate |
-| Accurate publishing status | ⬜ | Rule already written down: "published" only when the platform confirms |
+| Manual export with post text | ✅ | Still there, for anything the platforms do not allow |
+| YouTube Shorts upload | 🟡 | Sign-in on this PC (PKCE), resumable upload that continues after a break and never uploads twice, public / unlisted / private, YouTube's own scheduling, confirmation. Needs your Google Cloud project and Desktop OAuth client. Google's documentation (November 2026) says uploads from unverified projects are no longer locked to private |
+| TikTok | 🟡 | Drafts: clips go to your TikTok inbox and you post them in the app. Needs a TikTok developer app (Login Kit for desktop, Content Posting API); until TikTok reviews it, sandbox with your own account |
+| TikTok direct posting | 🔒 | Not offered: TikTok's rules for direct posting exclude tools for posting to your own accounts, and unaudited apps may only post privately |
+| Instagram Reels | 🟡 | Uploaded straight from this PC through Facebook Login for Business, so no public address is needed. Needs a professional account linked to a Facebook Page, a Meta app and a token from the Graph API Explorer, renewed about every 60 days |
+| Publishing queue, scheduler, calendar | ✅ | Queue with all-or-nothing checks, scheduler in the worker (posts go out while ClipForge runs; YouTube schedules by itself), month calendar, cancel, retry, remove |
+| Approval before posting | ✅ | Only approved, rendered clips from a source whose right to post you recorded; checked again just before sending; no second copy to the same account unless you ask; a daily limit per account |
+| Accurate publishing status | ✅ | Published only when the platform confirms; private uploads, YouTube-scheduled Shorts and TikTok drafts shown as what they are; a work-log line for every post |
+| Publishing assistant | ✅ | Claude suggests the title, caption and hashtags from what is said in the clip |
 
 ## Milestone 6 · Analytics and optimization — not started
 
@@ -92,7 +99,7 @@ need publishing or analytics show a dash.
 | Error handling | ✅ | Every failure path tested shows a message that says what to do |
 | Responsive interface | ✅ | Desktop and phone width |
 | Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Not reviewed by anyone else |
-| Testing | ✅ | 639 automated tests |
+| Testing | ✅ | 784 automated tests |
 | Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder |
 | Documentation | ✅ | |
 
@@ -114,7 +121,9 @@ need publishing or analytics show a dash.
    (your Claude plan, through the Claude Code tool on this PC). Prompted by your first real stream, where the
    local rules missed every funny moment. On that same stream it then found six genuinely funny moments where the rules had found none.
 6. **Saved presets and cutting out a middle section** in the editor.
-7. **YouTube Shorts upload**, then the publishing queue and calendar.
+7. ~~YouTube Shorts upload, then the publishing queue and calendar.~~ **Built on 22 November 2026**, with
+   TikTok drafts and Instagram Reels. Next there: connect your accounts and make the first real post on each,
+   which is the real test.
 8. **Analytics** from connected accounts, and with them the strategist.
 9. **Subject tracking and who-is-speaking detection.**
 

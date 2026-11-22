@@ -13,11 +13,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__, db
-from .api import clips, jobs, system, videos
+from .api import clips, jobs, publishing, system, videos
 from .config import check_bind, get_settings
 from .errors import ClipForgeError
 from .logging_config import setup_logging
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"error": "Something went wrong on the server.",
                              "hint": f"Details are in data/logs/api.log (reference {reference})."}, status_code=500)
 
-    for module in (videos, clips, jobs, system):
+    for module in (videos, clips, jobs, system, publishing):
         app.include_router(module.router, prefix="/api")
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
@@ -117,8 +117,12 @@ def create_app() -> FastAPI:
     dist = settings.frontend_dist
 
     @app.get("/{path:path}", include_in_schema=False)
-    async def interface(path: str):  # noqa: ANN202
+    async def interface(path: str, request: Request):  # noqa: ANN202
         """The built interface. Unknown paths get index.html so page links and refresh work."""
+        query = request.query_params
+        if not path and "state" in query and ("code" in query or "error" in query):
+            # Google sends you back to the bare address of this PC: pass the sign-in on to its callback
+            return RedirectResponse(f"/api/publishing/oauth/callback?{request.url.query}", status_code=302)
         if not (dist / "index.html").exists():
             return JSONResponse({"error": "The interface has not been built yet.",
                                  "hint": "Run scripts\\setup.ps1, or `npm run build` in the frontend folder."},
