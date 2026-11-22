@@ -15,6 +15,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
@@ -23,8 +24,8 @@ from sqlalchemy.orm import Session
 from .. import db
 from ..analysis.audio import AudioFeatures, compute_audio_features
 from ..analysis.dedupe import ExistingClip
-from ..analysis import claude_review
-from ..analysis.engine import HighlightOptions, find_highlights, highlights_from_picks
+from ..analysis import chatgpt_review, claude_review
+from ..analysis.engine import HighlightOptions, apply_second_opinion, find_highlights, highlights_from_picks
 from ..analysis.feedback import FeedbackProfile
 from ..analysis.lexicon import content_tokens
 from ..analysis.presets import CONTENT_PRESETS, LENGTH_RANGES
@@ -56,6 +57,7 @@ STAGES: dict[str, list[tuple[str, str, int]]] = {
     "analyze": [("audio", "Extracting audio", 3), ("transcribe", "Transcribing speech", 60),
                 ("signals", "Measuring sound and picture", 14), ("highlights", "Finding the best moments", 8),
                 ("review", "Claude is picking the clips", 12),
+                ("second", "ChatGPT is checking the picks", 10),
                 ("save", "Saving suggestions", 2)],
     "render": [("framing", "Framing the shot", 8), ("captions", "Building captions", 3),
                ("encode", "Rendering video", 77), ("checks", "Checking the export", 12)],
@@ -81,6 +83,11 @@ class JobContext:
         self._last_poll = 0.0
         self._cancel = False
         self.message = ""
+        self.worklog: list[dict[str, str]] = []   # short lines: who did what ("forge", "claude", "chatgpt")
+
+    def say(self, actor: str, text: str) -> None:
+        """Add one short line to the job's work log."""
+        self.worklog.append({"actor": actor, "text": text})
 
     def cancelled(self, force: bool = False) -> bool:
         if SHUTDOWN.is_set():
@@ -395,6 +402,7 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
 
         if saved is not None and saved.get("signature") == signature:
             ctx.skip("transcribe", "Reused the saved transcript")
+            ctx.say("forge", "Reused the transcript it had already made.")
             language = saved.get("language", "")
             with db.session_scope() as s:
                 words = load_words(s, video.id)
@@ -411,6 +419,9 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             words = refine_word_times(result.words, speech_envelope(wav))
             language = result.language
             timing["transcribe"] = round(time.monotonic() - started, 1)
+            ctx.say("forge", f"Transcribed {_clock(video.duration)} of speech ({len(words):,} words) on the "
+                             f"{'graphics card' if '|cuda|' in signature else 'processor'} in "
+                             f"{timing['transcribe']:.0f} s.")
             ctx.note(f"{len(words)} words" + (f", resumed after {result.resumed_windows} finished parts"
                                               if result.resumed_windows else ""))
             log.info("transcribed", extra={"video_id": video.id, "words": len(words), "seconds": timing["transcribe"],
@@ -472,6 +483,19 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         creator=video.creator_name, should_cancel=ctx.cancelled, on_progress=ctx.progress)
     timing["highlights"] = round(time.monotonic() - started, 1)
 
+    def titles(items: Sequence[Any], limit: int = 3) -> str:
+        names = [h if isinstance(h, str) else h.title for h in items]
+        shown = ", ".join(f"“{name}”" for name in names[:limit])
+        return shown + (f" and {len(names) - limit} more" if len(names) > limit else "")
+
+    def count(n: int, word: str) -> str:
+        return f"{n} {word}{'' if n == 1 else 's'}"
+
+    if cfg["ai.engine"] == "claude" and sentences:
+        ctx.say("forge", f"Measured sound and picture and made {len(highlights)} backup picks with its own rules.")
+    elif highlights:
+        ctx.say("forge", f"Picked {count(len(highlights), 'clip')} with its own rules: {titles(highlights)}.")
+
     # ---- Claude picks the clips (the local picks above are the fallback) ----------------------------
     if cfg["ai.engine"] != "claude":
         ctx.skip("review", "Local rules only (Settings)")
@@ -497,13 +521,59 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             if chosen:
                 highlights = chosen
                 ctx.note(f"Claude ({cfg['ai.claude_model']}) picked {len(chosen)}")
+                ctx.say("claude", f"Picked {count(len(chosen), 'clip')}: {titles(chosen)}.")
             else:
                 ctx.note("Claude found nothing above your minimum score; showing the local picks")
+                ctx.say("claude", "Found nothing above your minimum score, so Forge's own picks were kept.")
         except claude_review.ClaudeUnavailable as exc:
             log.warning("Claude review unavailable: %s", exc.message)
             ctx.note("Not used: " + exc.message.split(",")[0])
+            ctx.say("claude", f"Could not help: {exc.message.split(',')[0].rstrip('.')}. Forge's own picks were used.")
             note = exc.message + (" " + exc.hint if exc.hint else "")
         timing["review"] = round(time.monotonic() - started, 1)
+
+    # ---- ChatGPT checks the picks (second opinion) ---------------------------------------------------
+    if cfg["ai.engine"] != "claude":
+        ctx.skip("second", "Local rules only: nothing leaves this PC")
+    elif cfg["ai.second_opinion"] != "chatgpt":
+        ctx.skip("second", "Off in Settings")
+    elif not highlights or not sentences:
+        ctx.skip("second", "Nothing to check")
+    else:
+        ctx.start("second")
+        started = time.monotonic()
+        second_options = HighlightOptions(count=opts.count, min_len=opts.min_len, max_len=opts.max_len,
+                                          min_score=opts.min_score, preset=opts.content_preset,
+                                          game_style=opts.game_style, niche_keywords=tuple(cfg["niche.keywords"]),
+                                          language=language or "en")
+        prompt = chatgpt_review.build_prompt(sentences, highlights, second_options, title=video.title,
+                                             creator=video.creator_name)
+        try:
+            review = chatgpt_review.ask_chatgpt(prompt, model=str(cfg["ai.chatgpt_model"]),
+                                                should_cancel=ctx.cancelled)
+            highlights, summary = apply_second_opinion(
+                highlights, review, words, sentences, audio, visual, second_options, duration=video.duration,
+                existing=existing, feedback=feedback, video_title=video.title, creator=video.creator_name)
+            agreed, disagreed, added = summary["agreed"], summary["disagreed"], summary["added"]
+            ctx.note(f"Agreed with {len(agreed)}, disagreed with {len(disagreed)}, added {len(added)}")
+            line = f"Checked {count(len(agreed) + len(disagreed), 'pick')}: agreed with {len(agreed)}"
+            if disagreed:   # the reasons are on the clips themselves; the log stays short
+                line += f", disagreed with {len(disagreed)} ({titles([t for t, _ in disagreed], 2)})"
+            if added:
+                line += f", added {len(added)} ({titles(added, 2)})"
+            ctx.say("chatgpt", line + ".")
+        except chatgpt_review.ChatGPTUnavailable as exc:
+            log.warning("ChatGPT second opinion unavailable: %s", exc.message)
+            ctx.note("Not used: " + exc.message.split(",")[0])
+            ctx.say("chatgpt", f"Could not check the picks: {exc.message.split(',')[0].rstrip('.')}.")
+            note = (note + " " if note else "") + exc.message + (" " + exc.hint if exc.hint else "")
+        except JobCancelled:
+            raise
+        except Exception:  # noqa: BLE001  (an optional second opinion must never cost the user the picks)
+            log.warning("ChatGPT second opinion failed", exc_info=True)
+            ctx.note("Not used: unexpected error")
+            ctx.say("chatgpt", "Could not check the picks: something unexpected went wrong.")
+        timing["second"] = round(time.monotonic() - started, 1)
 
     # ---- save ------------------------------------------------------------------------------------
     ctx.start("save")
@@ -546,6 +616,11 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                    "Lower the minimum score or widen the clip length and analyse again.", f"/clipper?video={video.id}")
     if not highlights and not note:
         note = "No moment scored above the minimum. Try a lower minimum score or a wider length range."
+    if highlights:
+        ctx.say("forge", f"Saved {len(highlights)} clip{'s' if len(highlights) != 1 else ''}"
+                         + (" and started rendering them." if opts.auto_render else " for you to review."))
+    else:
+        ctx.say("forge", "Saved no clips: nothing scored above your minimum.")
     return {"clips": len(highlights), "words": len(words), "note": note, "timing": timing}
 
 
@@ -658,6 +733,10 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             ready = s.query(Clip).filter(Clip.video_id == stored.video_id, Clip.render_status == "ready").count()
             notify(s, "render_done", f"{ready} clip{'s' if ready != 1 else ''} ready from “{video.title}”",
                    "Preview, approve and download them in the AI Clipper.", f"/clipper?video={stored.video_id}")
+    passed = sum(1 for check in checks if check.get("status") == "pass")
+    ctx.say("forge", f"Rendered “{clip.title}” ({result.duration:.0f} s, {plan.out_w}×{plan.out_h}) on the "
+                     f"{'graphics card' if result.encoder == 'h264_nvenc' else 'processor'} in "
+                     f"{result.seconds_taken:.0f} s; {passed} of {len(checks)} checks passed.")
     return {"file": storage.rel_path(final), "seconds": result.seconds_taken, "qc": summarize(checks),
             "encoder": result.encoder}
 
@@ -707,6 +786,7 @@ def _import(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                 permission_note=str(payload.get("permission_note") or ""),
                 attribution=f"Clip from {creator}" if creator else "", project_id=project_id)
             video_id, title = video.id, video.title
+            s.get(Job, ctx.job_id).video_id = video_id  # so the import shows in that video's work log
             notify(s, "import_done", f"Imported “{title}”",
                    (f"From {found.site}. " if found.site and found.site != "Generic" else "")
                    + ("The same video was already in your library. " if duplicate else "")
@@ -717,6 +797,10 @@ def _import(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         if not SHUTDOWN.is_set():
             shutil.rmtree(folder, ignore_errors=True)
         raise
+    size = path.stat().st_size if path.exists() else 0
+    ctx.say("forge", f"Downloaded “{title}”" + (f" from {found.site}" if found.site and found.site != "Generic" else "")
+                     + f" ({size / 1024**2:.0f} MB, {_clock(info.duration)}) and added it to your library"
+                     + (", then queued it to find clips." if payload.get("analyze") else "."))
     log.info("video imported from a link", extra={"video_id": video_id, "site": found.site,
                                                   "seconds": round(info.duration, 1)})
     return {"video_id": video_id, "title": title, "duplicate_of": duplicate, "site": found.site,
@@ -771,6 +855,8 @@ def run_job(job_id: int) -> None:
         if handler is None:
             raise ClipForgeError(f"Unknown job type: {job['type']}")
         result = handler(ctx, job)
+        if ctx.worklog:
+            result = {**result, "log": ctx.worklog}
         ctx.finish()
         with db.session_scope() as s:
             queue.finish(s, job_id, result)
@@ -790,6 +876,8 @@ def run_job(job_id: int) -> None:
                     s.get(Video, job["video_id"]).status = "analyzing"
             else:
                 queue.mark_cancelled(s, job_id, "Cancelled")
+                if ctx is not None:   # keep the lines of what was already done
+                    s.get(Job, job_id).result = {"log": [*ctx.worklog, {"actor": "forge", "text": "Cancelled."}]}
         log.info("job stopped", extra={"job_id": job_id, "type": job["type"], "shutdown": SHUTDOWN.is_set()})
     except Exception as exc:  # noqa: BLE001  (a job must never take the worker down)
         if isinstance(exc, ClipForgeError):
@@ -805,3 +893,6 @@ def run_job(job_id: int) -> None:
         finally:
             with db.session_scope() as s:
                 queue.fail(s, job_id, message, detail[-6000:])
+                if ctx is not None:
+                    row = s.get(Job, job_id)
+                    row.result = {"log": [*ctx.worklog, {"actor": "forge", "text": f"Stopped: {message}"[:300]}]}

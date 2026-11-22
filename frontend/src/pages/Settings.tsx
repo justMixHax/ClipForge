@@ -133,6 +133,41 @@ function SecretField({ name, label, stored, onSaved }: { name: string; label: st
   );
 }
 
+type Connection = { ok: boolean; detail: string; model: string; seconds: number };
+
+function ConnectionTest() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ claude: Connection; chatgpt: Connection } | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await api.post<{ claude: Connection; chatgpt: Connection }>("/system/ai/test"));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const row = (name: string, c: Connection) => (
+    <p className="flex items-start gap-1.5 text-[12.5px]">
+      {c.ok ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-good" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-bad" />}
+      <span><span className="font-medium text-ink">{name}</span> <span className="text-muted">({c.model}, {c.seconds} s):</span> <span className={c.ok ? "text-ink" : "text-bad"}>{c.detail}</span></span>
+    </p>
+  );
+  return (
+    <div className="space-y-2 rounded-xl border border-line bg-bg/60 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-muted">Send a one-word test to Claude and ChatGPT to check both are connected.</p>
+        <Button size="sm" onClick={run} busy={busy}>Test connections</Button>
+      </div>
+      <ErrorNote error={error} />
+      {result && <div className="space-y-1">{row("Claude", result.claude)}{row("ChatGPT", result.chatgpt)}</div>}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const settings = useSettings();
   const options = useOptions();
@@ -210,6 +245,16 @@ export default function SettingsPage() {
                   <option value="sonnet">Sonnet</option><option value="opus">Opus</option><option value="haiku">Haiku</option>
                 </Select>
               </Field>
+              <Field label="Second opinion" hint="ChatGPT checks the picks through the Codex tool from the ChatGPT app and your ChatGPT plan, and may add up to two missed moments. Nothing is removed: you decide.">
+                <Select value={v("ai.engine") === "claude" ? String(v("ai.second_opinion")) : "off"} disabled={v("ai.engine") !== "claude"} onChange={(event) => save({ "ai.second_opinion": event.target.value })}>
+                  <option value="chatgpt">ChatGPT (recommended)</option><option value="off">Off</option>
+                </Select>
+              </Field>
+              <Field label="ChatGPT model" hint="As named in the ChatGPT app, e.g. gpt-6.2-astra.">
+                <Input defaultValue={String(v("ai.chatgpt_model"))} disabled={v("ai.second_opinion") !== "chatgpt"} spellCheck={false}
+                  onBlur={(event) => event.target.value.trim() && event.target.value.trim() !== v("ai.chatgpt_model") && save({ "ai.chatgpt_model": event.target.value.trim() })} />
+              </Field>
+              <div className="sm:col-span-2"><ConnectionTest /></div>
               <Field label="Video encoder">
                 <Select value={String(v("processing.video_encoder"))} onChange={(event) => save({ "processing.video_encoder": event.target.value })}>
                   <option value="auto">Automatic</option><option value="libx264">Processor (x264)</option><option value="h264_nvenc">Graphics card (NVENC)</option>

@@ -155,3 +155,17 @@ def test_the_tool_gets_a_clean_environment_so_it_uses_your_own_sign_in(monkeypat
 
 def test_the_sign_in_advice_names_the_exact_command():
     assert "claude auth login" in claude_review.SIGN_IN_HINT
+
+
+def test_a_claude_tool_that_windows_will_not_start_counts_as_unavailable(monkeypatch):  # noqa: ANN001
+    monkeypatch.setattr(claude_review, "find_cli", lambda configured="": "claude.exe")
+
+    def blocked(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        raise PermissionError("This program is blocked by group policy")
+
+    monkeypatch.setattr(claude_review.subprocess, "Popen", blocked)
+
+    with pytest.raises(ClaudeUnavailable) as failed:
+        claude_review.run_claude("a transcript")
+    assert "could not be started" in failed.value.message
+

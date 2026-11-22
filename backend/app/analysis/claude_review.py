@@ -72,6 +72,15 @@ def child_env() -> dict[str, str]:
             if k == "CLAUDE_CONFIG_DIR" or not k.upper().startswith(("ANTHROPIC_", "CLAUDE", "CLIPFORGE_"))}
 
 
+def _stop(proc: subprocess.Popen) -> None:
+    """End the tool and wait until it has let go of its files (on Windows they cannot be deleted before)."""
+    proc.kill()
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def command(cli: str, model: str) -> list[str]:
     # --bare is avoided on purpose: that mode only accepts an API key, not the plan's own sign-in.
     return [cli, "-p", "--output-format", "json", "--model", model, "--tools", "",
@@ -177,28 +186,50 @@ def parse_answer(printed: str) -> list[Pick]:
 # -------------------------------------------------------------------------------------------- the call
 def ask_claude(prompt: str, *, model: str = "sonnet", cli_path: str = "",
                should_cancel: Callable[[], bool] | None = None, timeout: float = TIMEOUT_SECONDS) -> list[Pick]:
+    return parse_answer(run_claude(prompt, model=model, cli_path=cli_path, should_cancel=should_cancel,
+                                   timeout=timeout))
+
+
+def ping(model: str = "haiku", timeout: float = 120) -> str:
+    """A one-word test of the connection. Returns Claude's reply, or raises ClaudeUnavailable."""
+    printed = run_claude("Reply with exactly: OK", model=model, timeout=timeout)
+    try:
+        envelope = json.loads(printed)
+    except ValueError:
+        raise _explain(printed.strip()[:300] or "no output") from None
+    if not isinstance(envelope, dict) or envelope.get("is_error"):
+        raise _explain(str(envelope.get("result") if isinstance(envelope, dict) else envelope)[:300])
+    return str(envelope.get("result") or "").strip()[:100]
+
+
+def run_claude(prompt: str, *, model: str = "sonnet", cli_path: str = "",
+               should_cancel: Callable[[], bool] | None = None, timeout: float = TIMEOUT_SECONDS) -> str:
+    """Send a prompt to Claude through the command-line tool and return what it printed."""
     cli = find_cli(cli_path)
     if cli is None:
         raise ClaudeUnavailable("The Claude Code command-line tool was not found on this PC, so the local rules "
                                 "picked the clips.", hint="Install Claude Code, sign in, and analyse again.")
     model = model if model in MODELS else "sonnet"
     with tempfile.TemporaryDirectory(prefix="clipforge_claude_") as empty:  # no project files, no CLAUDE.md
-        proc = subprocess.Popen(command(cli, model), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, cwd=empty, env=child_env(), text=True, encoding="utf-8",
-                                errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        try:
-            proc.stdin.write(prompt)
-            proc.stdin.close()
-        except OSError:
-            pass
-        started = time.monotonic()
-        while proc.poll() is None:
-            if should_cancel is not None and should_cancel():
-                proc.kill()
-                raise JobCancelled()
-            if time.monotonic() - started > timeout:
-                proc.kill()
-                raise ClaudeUnavailable("Claude took too long to answer, so the local rules picked the clips.")
-            time.sleep(0.5)
-        out, err = proc.communicate()
-    return parse_answer(out if out.strip() else err)
+        folder = Path(empty)
+        prompt_file, out_file, err_file = folder / "prompt.txt", folder / "out.txt", folder / "err.txt"
+        prompt_file.write_text(prompt, encoding="utf-8")
+        # prompt from a file and answers to files: nothing can block on a full pipe while the tool works
+        with open(prompt_file, "rb") as source, open(out_file, "wb") as out, open(err_file, "wb") as err:
+            try:
+                proc = subprocess.Popen(command(cli, model), stdin=source, stdout=out, stderr=err, cwd=empty,
+                                        env=child_env(), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            except OSError as exc:
+                raise ClaudeUnavailable("The Claude Code tool could not be started, so the local rules picked the "
+                                        "clips.", hint=str(exc)[:200]) from exc
+            started = time.monotonic()
+            while proc.poll() is None:
+                if should_cancel is not None and should_cancel():
+                    _stop(proc)
+                    raise JobCancelled()
+                if time.monotonic() - started > timeout:
+                    _stop(proc)
+                    raise ClaudeUnavailable("Claude took too long to answer, so the local rules picked the clips.")
+                time.sleep(0.5)
+        printed = out_file.read_text(encoding="utf-8", errors="replace")
+        return printed if printed.strip() else err_file.read_text(encoding="utf-8", errors="replace")

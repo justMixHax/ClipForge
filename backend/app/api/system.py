@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -66,6 +67,31 @@ def live_stats(session: Session = Depends(get_db)) -> dict:
     running = session.scalars(select(Job).where(Job.status == "running").order_by(Job.id)).first()
     return {**usage, "queue_length": session.scalar(select(func.count(Job.id)).where(Job.status == "queued")) or 0,
             "running": job_out(running) if running else None}
+
+
+@router.post("/system/ai/test")
+def test_ai_connections(session: Session = Depends(get_db)) -> dict:
+    """Send a one-word test to Claude and to ChatGPT, at the same time, and say how each went."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ..analysis import chatgpt_review, claude_review
+
+    cfg = settings_store.get_all(session)
+
+    def check(name: str, run, model: str) -> dict:  # noqa: ANN001
+        started = time.monotonic()
+        try:
+            reply = run(model)
+            return {"ok": True, "detail": f"Answered “{reply}”", "model": model,
+                    "seconds": round(time.monotonic() - started, 1)}
+        except (claude_review.ClaudeUnavailable, chatgpt_review.ChatGPTUnavailable) as exc:
+            return {"ok": False, "detail": exc.message + (f" {exc.hint}" if exc.hint else ""), "model": model,
+                    "seconds": round(time.monotonic() - started, 1)}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claude = pool.submit(check, "claude", claude_review.ping, "haiku")
+        chatgpt = pool.submit(check, "chatgpt", chatgpt_review.ping, str(cfg["ai.chatgpt_model"]))
+        return {"claude": claude.result(), "chatgpt": chatgpt.result()}
 
 
 @router.get("/system/features")

@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..analysis.presets import LENGTH_RANGES
+from ..analysis.chatgpt_review import valid_model
 from ..config import get_settings
 from ..errors import ClipForgeError
 from ..models import Secret, Setting
@@ -61,6 +62,8 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "export.folder": ("", _text(400)),
     "ai.engine": ("claude", _choice("claude", "local")),
     "ai.claude_model": ("sonnet", _choice("sonnet", "opus", "haiku")),
+    "ai.second_opinion": ("chatgpt", _choice("chatgpt", "off")),
+    "ai.chatgpt_model": ("gpt-6.2-astra", lambda v: isinstance(v, str) and valid_model(v)),
     "llm.provider": ("none", _choice("none", "ollama", "openai", "anthropic")),
     "llm.model": ("", _text(80)),
     "llm.base_url": ("http://localhost:11434", _text(200)),

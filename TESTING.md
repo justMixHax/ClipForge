@@ -8,14 +8,14 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 582 tests, about a minute and a half, plus a type-check of the interface. No speech model is needed;
+The fast suite: 631 tests, about a minute and a half, plus a type-check of the interface. No speech model is needed;
 tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 590
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 639
 tests, a little over three minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
@@ -25,8 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 22 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 590 passed,
-0 failed, 0 skipped, in 3 minutes 32 seconds.
+**Last full run:** 22 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 639 passed,
+0 failed, 0 skipped, in 4 minutes 13 seconds.
 
 ## How the tests are built
 
@@ -140,6 +140,15 @@ minimum asked for. All six rendered on the graphics card and passed every check.
 The first real run also found a defect: started from inside another Claude program, ClipForge passed that
 program's connection settings on to the tool, which then ignored the user's own sign-in. Fixed and tested
 (`test_the_tool_gets_a_clean_environment_so_it_uses_your_own_sign_in`).
+
+## Code reviews by ChatGPT
+
+Since 22 November 2026, changes are reviewed by ChatGPT (GPT-6.2 Astra, through Codex) before they are
+committed: `scripts\review.ps1`. The reviews are kept in `reviews/`. The first one, of the ChatGPT second opinion
+and the work log, found 11 real problems (4 serious), including that a "Local rules only" setup would have
+started sending transcripts to ChatGPT. All were fixed in the same change, each with a test. A second review
+of the fixed version found 11 narrower points; 10 were fixed the same way and one was declined with a reason
+(noted in the review file).
 
 ## Defects the tests found
 

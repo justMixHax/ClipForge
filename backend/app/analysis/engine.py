@@ -316,8 +316,8 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
                           visual: VisualFeatures | None, options: HighlightOptions, picks: Sequence[Any], *,
                           duration: float, existing: Sequence[ExistingClip] = (),
                           feedback: FeedbackProfile | None = None, video_title: str = "",
-                          creator: str = "") -> list[Highlight]:
-    """Turn the moments Claude picked into highlights. Each pick is widened to whole sentences, keeps the
+                          creator: str = "", source: str = "claude") -> list[Highlight]:
+    """Turn the moments an AI picked (source "claude", or "chatgpt" for its additions) into highlights. Each pick is widened to whole sentences, keeps the
     12-part breakdown from the local rules for reference, and takes Claude's score, title and reason."""
     ctx = None
     if sentences:
@@ -333,30 +333,71 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
             continue
         start, end = max(0.0, pick.start), min(duration, pick.end)
         inside = [s.idx for s in sentences if s.end > start + 0.05 and s.start < end - 0.05]
+        if source == "chatgpt" and not inside:
+            continue  # ChatGPT only reads the transcript: a moment where nobody speaks is not one it heard
         full = ctx.score(inside[0], inside[-1], explain=True) if (ctx is not None and inside) else None
         if full is not None:
             start, end = full.start, full.end
-        if end - start > options.max_len + 15 or end - start < 3:
-            continue
+        if not (max(3.0, 0.8 * options.min_len) <= end - start <= options.max_len + 10):
+            continue  # outside the length asked for (a little leeway for whole sentences)
         if any(min(end, b) - max(start, a) > min(1.0, 0.1 * (end - start)) for a, b in taken):
             continue
         taken.append((start, end))
         said = " ".join(w.text for w in words if w.start >= start - 0.05 and w.end <= end + 0.05 and w.text.strip())
-        reason = pick.reason or "Claude picked this moment."
+        who = "ChatGPT" if source == "chatgpt" else "Claude"
+        reason = pick.reason or f"{who} picked this moment."
         evidence = [{"dimension": "entertainment", "impact": 0.0, "time": None, "quote": None,
-                     "text": f"Claude: {reason}"}] + (full.evidence if full is not None else [])
+                     "text": f"{who}: {reason}"}] + (full.evidence if full is not None else [])
         subscores = dict(full.subscores) if full is not None else {d: 50.0 for d in DIMENSIONS}
         title = pick.title or (said[:60] if said else f"Moment at {_clock(start)}")
         hook = pick.hook or title
         found.append(Highlight(
             start=round(start, 3), end=round(end, 3), score=pick.score, subscores=subscores,
-            confidence=0.8, explanation=f"Picked by Claude: {reason}", evidence=evidence, category=pick.category,
+            confidence=0.8 if source == "claude" else 0.7,
+            explanation=f"{'Added by ChatGPT' if source == 'chatgpt' else 'Picked by Claude'}: {reason}",
+            evidence=evidence, category=pick.category,
             title=title, hook_text=hook, hook_options=[hook] + ([title] if title != hook else []),
             hashtags=build_hashtags(pick.category, options.preset, options.game_style, creator,
                                     f"{video_title} {said}"),
             description=build_description(title, creator), transcript_text=said, rank=0,
-            analysis_source="claude", peak_time=round(full.peak_time if full is not None else start, 2)))
+            analysis_source=source, peak_time=round(full.peak_time if full is not None else start, 2)))
     found.sort(key=lambda h: -h.score)
     for rank, h in enumerate(found, 1):
         h.rank = rank
     return found
+
+
+def apply_second_opinion(picks: list[Highlight], review: Any, words: list[Word], sentences: list[Sentence],
+                         audio: AudioFeatures | None, visual: VisualFeatures | None, options: HighlightOptions, *,
+                         duration: float, existing: Sequence[ExistingClip] = (),
+                         feedback: FeedbackProfile | None = None, video_title: str = "",
+                         creator: str = "") -> tuple[list[Highlight], dict[str, list]]:
+    """Record ChatGPT's verdict on each pick and add the missed moments it found. Nothing is dropped: a clip
+    ChatGPT disagrees with stays, marked, so the user decides. Returns (all highlights, summary)."""
+    from .chatgpt_review import MAX_ADDITIONS
+
+    summary: dict[str, list] = {"agreed": [], "disagreed": [], "added": []}
+    for number, highlight in enumerate(picks, 1):
+        if number not in review.verdicts:
+            continue
+        verdict, reason = review.verdicts[number]
+        highlight.evidence.append({
+            "dimension": "chatgpt", "verdict": verdict, "impact": 0.0, "time": None, "quote": None,
+            "text": f"ChatGPT {'agrees' if verdict == 'agree' else 'disagrees'}" + (f": {reason}" if reason else ".")})
+        if verdict == "agree":
+            summary["agreed"].append(highlight.title)
+        else:
+            summary["disagreed"].append((highlight.title, reason))
+    added: list[Highlight] = []
+    if review.additions:  # scoring setup is expensive on long videos: only when there is something to add
+        taken = list(existing) + [ExistingClip(h.start, h.end, frozenset()) for h in picks]
+        extra_options = HighlightOptions(**{**options.__dict__, "count": MAX_ADDITIONS})
+        added = highlights_from_picks(words, sentences, audio, visual, extra_options, review.additions,
+                                      duration=duration, existing=taken, feedback=feedback, video_title=video_title,
+                                      creator=creator, source="chatgpt")
+    summary["added"] = [h.title for h in added]
+    merged = sorted([*picks, *added], key=lambda h: -h.score)
+    for rank, highlight in enumerate(merged, 1):
+        highlight.rank = rank
+    return merged, summary
+

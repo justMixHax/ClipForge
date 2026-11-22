@@ -57,10 +57,12 @@ Nothing, unless you start it:
 | `scripts\enable-gpu.ps1` | NVIDIA runtime libraries | PyPI |
 | Checking or importing a link | The video's details, then the video itself | The site in the link you pasted, and the addresses that site serves its video from |
 | Analysing a video with Claude as the engine (the default) | The video's transcript, title and creator name, never the video itself | Anthropic, through the Claude Code tool on this PC and your own Claude sign-in |
+| ChatGPT's second opinion (on by default, skipped with "Local rules only") | The transcript, title, creator name and the picks | OpenAI, through the Codex tool from the ChatGPT app, only when it is signed in with ChatGPT (never an API key) |
+| `scripts\review.ps1` (code reviews) | The uncommitted code changes | OpenAI, the same way |
 | `scripts\update-downloader.ps1` | The newest yt-dlp release | PyPI |
 
 There is no telemetry, no update check and no analytics. Your videos and clips are never uploaded.
-Transcripts are sent only to Claude when it picks the clips; set Settings → Who picks the clips to
+Transcripts are sent only to Claude when it picks the clips and to ChatGPT when it checks them; set Settings → Who picks the clips to
 "Local rules only" to keep everything on this PC. No paid API is ever called: the language-model review that would use one is not built, and the
 setting that will allow paid requests is off by default.
 

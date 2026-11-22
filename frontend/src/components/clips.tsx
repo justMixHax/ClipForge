@@ -200,6 +200,8 @@ export function ClipCard({
                 {position !== undefined && <span className="tabular text-xs font-semibold text-faint">#{position}</span>}
                 {category && <Badge tone="accent">{category}</Badge>}
                 {clip.analysis_source === "claude" && <Badge tone="info" title="Claude chose this moment; the reason is below">Picked by Claude</Badge>}
+                {clip.analysis_source === "chatgpt" && <Badge tone="good" title="ChatGPT found this moment; the reason is below">Added by ChatGPT</Badge>}
+                {(() => { const v = clip.evidence.find((e) => e.dimension === "chatgpt")?.verdict; return v === "agree" ? <Badge tone="good" title="ChatGPT checked this pick and agrees">Checked by ChatGPT</Badge> : v === "disagree" ? <Badge tone="warn" title="ChatGPT thinks this would not work as a short; its reason is below">ChatGPT disagrees</Badge> : null; })()}
                 {clip.origin === "variant" && <Badge tone="info">{clip.variant_label || "Variant"}</Badge>}
                 {clip.manual_rank !== null && <Badge title="You placed this clip yourself">Your order</Badge>}
                 <ReviewBadge status={clip.review_status} />
@@ -319,6 +321,8 @@ export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | nu
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
                 {clip.analysis_source === "claude" && <Badge tone="info">Picked by Claude</Badge>}
+                {clip.analysis_source === "chatgpt" && <Badge tone="good" title="ChatGPT found this moment; the reason is below">Added by ChatGPT</Badge>}
+                {(() => { const v = clip.evidence.find((e) => e.dimension === "chatgpt")?.verdict; return v === "agree" ? <Badge tone="good" title="ChatGPT checked this pick and agrees">Checked by ChatGPT</Badge> : v === "disagree" ? <Badge tone="warn" title="ChatGPT thinks this would not work as a short; its reason is below">ChatGPT disagrees</Badge> : null; })()}
                 <ReviewBadge status={clip.review_status} />
                 <QcBadge clip={clip} />
                 {clip.permission_status && <RightsBadge status={clip.permission_status} />}

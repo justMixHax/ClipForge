@@ -417,3 +417,57 @@ def test_everything_is_still_there_after_a_restart(data_dir: Path, tiny_video: P
         assert second.get(f"/api/videos/{video['id']}/stream", headers={"Range": "bytes=0-9"}).status_code == 206
     with db.session_scope() as s:
         assert s.query(Video).count() == 1 and s.query(Clip).count() == 1 and s.query(Job).count() == 0
+
+
+def test_testing_the_ai_connections_reports_each_one_separately(client: TestClient, monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review, claude_review
+
+    monkeypatch.setattr(claude_review, "ping", lambda model="haiku", timeout=120: "OK")
+
+    def signed_out(model="gpt-6.2-astra", timeout=120):  # noqa: ANN001, ANN202
+        raise chatgpt_review.ChatGPTUnavailable("ChatGPT is signed out on this PC.", hint="Sign in.")
+
+    monkeypatch.setattr(chatgpt_review, "ping", signed_out)
+
+    body = client.post("/api/system/ai/test").json()
+
+    assert body["claude"]["ok"] is True and "OK" in body["claude"]["detail"] and body["claude"]["model"] == "haiku"
+    assert body["chatgpt"]["ok"] is False and "signed out" in body["chatgpt"]["detail"]
+    assert body["chatgpt"]["model"] == "gpt-6.2-astra"
+
+
+def test_jobs_can_be_listed_newest_finished_first(client: TestClient, uploaded: dict):
+    """The work log needs finishing order; the default order is the queue's (priority first)."""
+    from datetime import timedelta
+
+    from app.db import utcnow
+
+    now = utcnow()
+    with db.session_scope() as s:
+        old_render = Job(type="render", status="succeeded", priority=8, video_id=uploaded["id"],
+                         finished_at=now - timedelta(hours=2))
+        new_analysis = Job(type="analyze", status="succeeded", priority=0, video_id=uploaded["id"], finished_at=now)
+        s.add_all([old_render, new_analysis])
+        s.flush()
+        expected = [new_analysis.id, old_render.id]
+
+    listed = client.get("/api/jobs", params={"video_id": uploaded["id"], "sort": "recent"}).json()
+
+    assert [j["id"] for j in listed] == expected
+
+def test_the_finished_list_leaves_out_jobs_that_are_still_waiting(client: TestClient, uploaded: dict):
+    from app.db import utcnow
+
+    with db.session_scope() as s:
+        s.add(Job(type="analyze", status="succeeded", video_id=uploaded["id"], finished_at=utcnow()))
+        for _ in range(3):
+            s.add(Job(type="render", status="queued", video_id=uploaded["id"]))
+
+    listed = client.get("/api/jobs", params={"video_id": uploaded["id"], "sort": "recent", "limit": 2}).json()
+
+    assert [j["status"] for j in listed] == ["succeeded"]
+
+
+def test_the_chatgpt_model_setting_refuses_odd_characters(client: TestClient):
+    assert client.put("/api/settings", json={"values": {"ai.chatgpt_model": "gpt & calc"}}).status_code == 400
+    assert client.put("/api/settings", json={"values": {"ai.chatgpt_model": "gpt-6.2-astra"}}).status_code == 200

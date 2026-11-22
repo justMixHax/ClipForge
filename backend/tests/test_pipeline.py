@@ -348,3 +348,190 @@ def test_with_the_local_engine_claude_is_never_asked(video: Video, model: Script
     assert next(st for st in job.stages if st["key"] == "review")["status"] == "skipped"
     assert clips_of(video)
 
+
+# ---------------------------------------------------------------------- ChatGPT's second opinion, the work log
+def second_opinion_on() -> None:
+    from app.services import settings_store
+    with db.session_scope() as s:
+        settings_store.set_many(s, {"ai.engine": "claude", "ai.second_opinion": "chatgpt"})
+
+
+def lines(job: Job) -> list[tuple[str, str]]:
+    return [(entry["actor"], entry["text"]) for entry in (job.result or {}).get("log", [])]
+
+
+def fake_claude_story(monkeypatch) -> None:  # noqa: ANN001
+    from app.analysis import claude_review
+    from app.analysis.claude_review import Pick
+
+    monkeypatch.setattr(claude_review, "ask_claude", lambda prompt, **kw: [
+        Pick(start=14.0, end=35.0, title="Phone in his hand", hook="45 minutes", category="funny", score=91,
+             reason="A full story with a punchline.")])
+
+
+def test_chatgpt_checks_claudes_picks_adds_a_missed_one_and_the_log_says_who_did_what(video: Video, model: ScriptedModel,
+                                                                                    monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review
+    from app.analysis.chatgpt_review import Review
+    from app.analysis.claude_review import Pick
+
+    fake_claude_story(monkeypatch)
+    asked: list[str] = []
+
+    def fake_chatgpt(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        asked.append(prompt)
+        return Review(verdicts={1: ("agree", "Clear punchline.")},
+                      additions=[Pick(start=1.0, end=11.5, title="Settings menu", hook="", category="highlight",
+                                      score=52, reason="Calm intro.")])
+
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt", fake_chatgpt)
+    second_opinion_on()
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    assert len(asked) == 1 and "Phone in his hand" in asked[0]
+    second = next(st for st in job.stages if st["key"] == "second")
+    assert second["status"] == "done" and "added 1" in second["note"]
+    by_source = {c.analysis_source: c for c in clips_of(video)}
+    assert set(by_source) == {"claude", "chatgpt"}
+    verdict = next(e for e in by_source["claude"].evidence if e["dimension"] == "chatgpt")
+    assert verdict["verdict"] == "agree"
+    assert by_source["chatgpt"].explanation.startswith("Added by ChatGPT")
+
+    log = lines(job)
+    assert [actor for actor, _ in log] == ["forge", "forge", "claude", "chatgpt", "forge"]
+    assert "Transcribed" in log[0][1] and "words" in log[0][1]
+    assert log[2][1] == "Picked 1 clip: “Phone in his hand”."
+    assert log[3][1] == "Checked 1 pick: agreed with 1, added 1 (“Settings menu”)."
+    assert log[4][1].startswith("Saved 2 clips")
+    assert all(len(text) < 200 for _, text in log)                      # short lines, as asked
+
+
+def test_when_chatgpt_cannot_be_reached_claudes_picks_stay_and_the_log_says_so(video: Video, model: ScriptedModel,
+                                                                               monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review
+
+    fake_claude_story(monkeypatch)
+
+    def signed_out(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        raise chatgpt_review.ChatGPTUnavailable("ChatGPT is signed out on this PC, so there is no second opinion "
+                                                "this time.", hint=chatgpt_review.SIGN_IN_HINT)
+
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt", signed_out)
+    second_opinion_on()
+
+    job = analyze(video)
+
+    assert job.status == "succeeded"
+    assert [c.analysis_source for c in clips_of(video)] == ["claude"]
+    assert ("chatgpt", "Could not check the picks: ChatGPT is signed out on this PC.") in lines(job)
+    assert "signed out" in job.result["note"]
+
+
+def test_a_render_logs_what_forge_did(video: Video, model: ScriptedModel):
+    analyze(video, auto_render=True, count=1)
+
+    render = run_next()
+
+    (actor, text), = lines(render)
+    assert actor == "forge" and text.startswith("Rendered “") and "checks passed" in text and "1080×1920" in text
+
+
+def test_a_failed_job_logs_where_it_stopped(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    analyze(video, auto_render=True, count=1)
+
+    def explode(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise ffmpeg.FFmpegError("FFmpeg failed", 1, "Invalid data found when processing input")
+
+    monkeypatch.setattr(pipeline, "render_clip", explode)
+    job = run_next()
+
+    assert job.status == "failed"
+    assert lines(job)[-1][0] == "forge" and lines(job)[-1][1].startswith("Stopped: FFmpeg failed")
+
+
+def test_with_the_second_opinion_off_chatgpt_is_never_asked(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review
+
+    fake_claude_story(monkeypatch)
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt", lambda *a, **k: pytest.fail("ChatGPT was asked"))
+    claude_on()
+
+    job = analyze(video)
+
+    assert next(st for st in job.stages if st["key"] == "second")["status"] == "skipped"
+    assert "chatgpt" not in [actor for actor, _ in lines(job)]
+
+
+def test_the_chatgpt_line_stays_short_even_when_it_disagrees_a_lot(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review
+    from app.analysis.chatgpt_review import Review
+
+    fake_claude_story(monkeypatch)
+    long_reason = "The joke depends on a setup that happens well before the clip starts, so a viewer would be lost " * 3
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt",
+                        lambda prompt, **kw: Review(verdicts={1: ("disagree", long_reason)}))
+    second_opinion_on()
+
+    job = analyze(video)
+
+    (text,) = [text for actor, text in lines(job) if actor == "chatgpt"]
+    assert text == "Checked 1 pick: agreed with 0, disagreed with 1 (“Phone in his hand”)."
+    clip = clips_of(video)[0]
+    assert "setup that happens well before" in next(e["text"] for e in clip.evidence if e["dimension"] == "chatgpt")
+
+
+def test_local_rules_only_means_nothing_goes_to_chatgpt_either(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    """Someone who chose "Local rules only" before the second opinion existed must not start sending transcripts."""
+    from app.analysis import chatgpt_review
+    from app.services import settings_store
+
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt", lambda *a, **k: pytest.fail("ChatGPT was asked"))
+    with db.session_scope() as s:
+        settings_store.set_many(s, {"ai.engine": "local", "ai.second_opinion": "chatgpt"})
+
+    job = analyze(video)
+
+    second = next(st for st in job.stages if st["key"] == "second")
+    assert second["status"] == "skipped" and "nothing leaves this PC" in second["note"]
+
+
+def test_an_unexpected_error_in_the_second_opinion_keeps_the_picks(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.analysis import chatgpt_review
+
+    fake_claude_story(monkeypatch)
+
+    def broken(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        raise TypeError("'int' object is not iterable")
+
+    monkeypatch.setattr(chatgpt_review, "ask_chatgpt", broken)
+    second_opinion_on()
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    assert [c.analysis_source for c in clips_of(video)] == ["claude"]
+    assert any(actor == "chatgpt" and text.startswith("Could not check the picks") for actor, text in lines(job))
+
+def test_a_cancelled_job_keeps_the_lines_of_what_was_already_done(video: Video, monkeypatch):  # noqa: ANN001
+    from app.jobs.queue import request_cancel
+
+    scripted = ScriptedModel(SCRIPT)
+    monkeypatch.setattr(pipeline, "load_transcriber", lambda session: (scripted, "scripted|test", "cpu"))
+    real_find = pipeline.find_highlights
+
+    def cancel_after_transcribing(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        with db.session_scope() as s:
+            job = s.query(Job).filter_by(type="analyze").one()
+            request_cancel(s, job.id)
+        return real_find(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "find_highlights", cancel_after_transcribing)
+
+    job = analyze(video)
+
+    assert job.status == "cancelled"
+    log = lines(job)
+    assert log[0][0] == "forge" and log[0][1].startswith("Transcribed")
+    assert log[-1] == ("forge", "Cancelled.")

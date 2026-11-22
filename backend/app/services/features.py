@@ -16,7 +16,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ..analysis import claude_review
+from ..analysis import chatgpt_review, claude_review
 from ..editing.reframe import detector_available
 from ..transcription import models
 from . import downloader, hardware
@@ -54,6 +54,14 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               "and the job says why. Switch it off in Settings." if claude_review.find_cli()
               else "The Claude Code command-line tool was not found. Install it and sign in; until then the local "
                    "rules pick the clips."),
+        _item("chatgpt_second_opinion", "Clipping", "Second opinion: ChatGPT",
+              "working" if chatgpt_review.find_cli() else "needs_setup",
+              "ChatGPT checks the picks and may add up to two missed moments, through the Codex tool from the "
+              "ChatGPT app and your own ChatGPT plan (no API key). If it is signed out or the plan limit is "
+              "reached, the picks are kept unchecked and the job says why. Switch it off in Settings."
+              if chatgpt_review.find_cli() else
+              "The Codex tool from the ChatGPT app was not found. Install the app and sign in; until then the "
+              "picks are not double-checked."),
         _item("llm_pass", "Clipping", "Other AI providers (Ollama, OpenAI, Anthropic API)", "planned",
               "Not built. Claude through your plan is the AI engine; keys stored here are kept for later and no "
               "request is sent with them today."),

@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom";
 import { ClipCard, ClipViewer, RightsBadge, SourcePeek, useClipActions } from "../components/clips";
 import { JobStages } from "../components/JobStages";
 import { LinkImport } from "../components/LinkImport";
+import { VideoWorkLog } from "../components/WorkLog";
 import { ProjectSelect } from "../components/projects";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Field, Input, Progress, Segmented, Select, Switch, useToast } from "../components/ui";
 import { api, uploadVideo, type Clip, type Job, type Video } from "../lib/api";
@@ -462,6 +463,7 @@ export default function Clipper() {
       </div>
 
       <ClipViewer clip={viewed} options={options.data} onClose={() => setViewing(null)} onPeek={setPeek} />
+      {videoId !== null && <div className="xl:col-start-2"><VideoWorkLog videoId={videoId} /></div>}
       <SourcePeek videoId={videoId} time={peek} title={video.data?.title} onClose={() => setPeek(null)} />
     </div>
   );

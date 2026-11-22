@@ -92,7 +92,7 @@ need publishing or analytics show a dash.
 | Error handling | ✅ | Every failure path tested shows a message that says what to do |
 | Responsive interface | ✅ | Desktop and phone width |
 | Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Not reviewed by anyone else |
-| Testing | ✅ | 590 automated tests |
+| Testing | ✅ | 639 automated tests |
 | Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder |
 | Documentation | ✅ | |
 
@@ -117,6 +117,13 @@ need publishing or analytics show a dash.
 7. **YouTube Shorts upload**, then the publishing queue and calendar.
 8. **Analytics** from connected accounts, and with them the strategist.
 9. **Subject tracking and who-is-speaking detection.**
+
+## Done on 22 November 2026 (after the list above)
+
+- **ChatGPT as the second opinion**: checks Claude's picks, marks the ones it disagrees with and adds up to
+  two missed moments, through your ChatGPT plan. On your stream it agreed with 4 of 6 and added 2.
+- **Work log**: after every job, short lines saying what Forge, Claude and ChatGPT each did.
+- **Code reviews by ChatGPT** before each commit (`scripts\review.ps1`).
 
 ## What needs you
 

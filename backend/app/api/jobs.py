@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -24,7 +24,8 @@ def _get(session: Session, job_id: int) -> Job:
 
 @router.get("", response_model=list[JobOut])
 def list_jobs(active: bool = False, video_id: int | None = None, clip_id: int | None = None,
-              limit: int = Query(50, ge=1, le=200), session: Session = Depends(get_db)) -> list[JobOut]:
+              limit: int = Query(50, ge=1, le=200), sort: str = Query("queue", pattern="^(queue|recent)$"),
+              session: Session = Depends(get_db)) -> list[JobOut]:
     query = select(Job)
     if active:
         query = query.where(Job.status.in_(queue.ACTIVE))
@@ -35,6 +36,9 @@ def list_jobs(active: bool = False, video_id: int | None = None, clip_id: int | 
     # running first, then waiting in the order they will run, then the most recent finished ones
     order = (Job.status != "running", Job.status != "queued", Job.priority.desc(), Job.id.desc()) if not active else (
         Job.status != "running", Job.priority.desc(), Job.id.asc())
+    if sort == "recent":  # the work log: finished jobs only, the most recently finished first
+        query = query.where(Job.status.in_(("succeeded", "failed", "cancelled")))
+        order = (func.coalesce(Job.finished_at, Job.created_at).desc(), Job.id.desc())
     return [job_out(j) for j in session.scalars(query.order_by(*order).limit(limit))]
 
 

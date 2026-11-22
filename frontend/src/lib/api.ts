@@ -149,6 +149,7 @@ export interface Video {
 
 export interface Evidence {
   dimension: string;
+  verdict?: "agree" | "disagree";
   impact: number;
   text: string;
   time: number | null;

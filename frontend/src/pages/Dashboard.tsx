@@ -1,4 +1,5 @@
 import { Download, Activity, CheckCircle2, Clapperboard, Cpu, Film, HardDrive, Hourglass, Link2Off, Sparkles, XCircle } from "lucide-react";
+import { logOf, WorkLogLines } from "../components/WorkLog";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ClipThumb, ClipViewer, ScoreRing, SourcePeek } from "../components/clips";
@@ -37,7 +38,8 @@ function JobRow({ job }: { job: Job }) {
   const tone = job.status === "succeeded" ? "good" : job.status === "failed" ? "bad" : job.status === "cancelled" ? "neutral" : "accent";
   const took = job.started_at && job.finished_at ? (new Date(job.finished_at).getTime() - new Date(job.started_at).getTime()) / 1000 : null;
   return (
-    <li className="flex items-center gap-3 py-2">
+    <li className="py-2">
+      <div className="flex items-center gap-3">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-raised text-faint">
         {job.type === "analyze" ? <Sparkles className="h-3.5 w-3.5" /> : job.type === "import" ? <Download className="h-3.5 w-3.5" /> : <Clapperboard className="h-3.5 w-3.5" />}
       </span>
@@ -48,6 +50,8 @@ function JobRow({ job }: { job: Job }) {
         )}
       </div>
       <Badge tone={tone}>{job.status}</Badge>
+      </div>
+      {logOf(job).length > 0 && <WorkLogLines lines={logOf(job)} className="mt-1.5 pl-10" />}
     </li>
   );
 }

@@ -67,6 +67,8 @@ def test_importing_a_link_adds_the_video_with_its_source_and_rights(data_dir: Pa
     source = storage.video_source_path(video)
     assert source.read_bytes() == site.video and source.parent.parent == data_dir / "uploads"
     assert storage.data_path(video.thumb_path).stat().st_size > 1000
+    (actor, text), = [(e["actor"], e["text"]) for e in job.result["log"]]
+    assert actor == "forge" and text.startswith("Downloaded “clip”") and "added it to your library" in text
     with db.session_scope() as s:
         note = s.query(Notification).one()
         assert "clip" in note.title and note.link == f"/clipper?video={video.id}"

@@ -84,6 +84,17 @@ widened to whole sentences, de-duplicated, given the local 12-part breakdown for
 Claude's title, hook, score and reason (`analysis_source = "claude"`). If the tool is missing, signed out or
 over the plan's limit, the local picks are saved and the job says why.
 
+**ChatGPT's second opinion** (`analysis/chatgpt_review.py`): ChatGPT then gets the same transcript and the
+numbered picks, and answers "agree" or "disagree" with a reason for each, plus at most two missed moments.
+Nothing is removed: a disputed clip stays, marked "ChatGPT disagrees". It runs `codex exec` read-only, with
+its shell, file, browser, app and plugin tools switched off, the user's Codex settings ignored and OpenAI's
+own provider forced, and only after `codex login status` reports a ChatGPT sign-in (never an API key). With
+"Local rules only" chosen it is skipped, so nothing leaves the PC.
+
+**The work log**: every job collects short lines saying who did what (`ctx.say("forge" | "claude" |
+"chatgpt", text)`) and stores them in `result.log`, also when a job fails. The AI Clipper shows them per
+video ("Work log"), and the Dashboard under each job.
+
 ## The highlight engine
 
 This is the core of the product, and it is deliberately made of rules you can read and test rather than a
