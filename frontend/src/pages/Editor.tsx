@@ -1,13 +1,13 @@
 // The clip editor: trim on a waveform, edit every caption word, restyle, reframe, then render.
 // Changes are kept in a draft with undo and redo, and only reach the clip when you save or render.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, Pause, Play, Redo2, RotateCcw, Save, Undo2, Wand2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, Pause, Play, Redo2, RotateCcw, Save, Scissors, Undo2, Wand2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ClipThumb, ScoreRing } from "../components/clips";
 import { JobStages } from "../components/JobStages";
 import { ThumbnailPanel, TikTokCaption } from "../components/thumbnail";
-import { Timeline, type TimedWord } from "../components/Timeline";
+import { snapTime, Timeline, type TimedWord } from "../components/Timeline";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, NumberField, Segmented, Select, Spinner, Switch, Textarea, useToast } from "../components/ui";
 import { api, query, type CaptionPreset, type CaptionSettings, type CaptionWord, type Clip, type ClipSettings, type Options, type Segment, type Timeline as TimelineData, type Video } from "../lib/api";
 import { clock, cx, duration } from "../lib/format";
@@ -160,7 +160,7 @@ function StylePanel({ draft, options, preset, setCaptions, setSettings, setField
   return (
     <div className="space-y-4">
       <Switch checked={c.enabled !== false} onChange={(value) => setCaptions({ enabled: value })} label="Burn captions into the video" />
-      <Field label="Style">
+      <Field label="Style" group>
         <div className="grid grid-cols-3 gap-1.5">
           {options.caption_presets.map((p) => (
             <button key={p.key} type="button" onClick={() => setSettings({ captions: { enabled: c.enabled, preset: p.key, censor: c.censor } })}
@@ -238,7 +238,7 @@ function LayoutPanel({ draft, options, reason, setSettings }: { draft: Draft; op
   };
   return (
     <div className="space-y-4">
-      <Field label="Shape">
+      <Field label="Shape" group>
         <Segmented value={s.aspect} onChange={(value) => setSettings({ aspect: value })} options={options.aspects.map((a) => ({ value: a.key, label: a.key, title: `${a.width}×${a.height}` }))} />
       </Field>
       <Field label="Layout" hint={reason ? `Last render: ${reason}` : "Automatic looks for a face or a facecam in the clip."}>
@@ -314,6 +314,21 @@ function DetailsPanel({ draft, clip, setField }: { draft: Draft; clip: Clip; set
 }
 
 // -------------------------------------------------------------------------------------------- editor
+/** Parts left out, kept inside the clip, in order, and merged where they touch (as the server keeps them). */
+function mergeParts(parts: [number, number][], start: number, end: number): [number, number][] {
+  const inside = parts
+    .map(([a, b]) => [Math.max(a, start), Math.min(b, end)] as [number, number])
+    .filter(([a, b]) => b - a >= 0.1)
+    .sort((x, y) => x[0] - y[0]);
+  const merged: [number, number][] = [];
+  for (const [a, b] of inside) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1] + 0.05) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  return merged.map(([a, b]) => [Math.round(a * 1000) / 1000, Math.round(b * 1000) / 1000]);
+}
+
 export default function Editor() {
   const { clipId } = useParams();
   const id = Number(clipId);
@@ -466,14 +481,22 @@ export default function Editor() {
     } else element.pause();
   };
   // The current in and out points, readable from event handlers without re-subscribing on every edit.
-  const range = useRef({ start: 0, end: 0 });
-  if (draft) range.current = { start: draft.start, end: draft.end };
+  const range = useRef<{ start: number; end: number; cuts: [number, number][] }>({ start: 0, end: 0, cuts: [] });
+  if (draft) range.current = { start: draft.start, end: draft.end, cuts: draft.settings.cuts ?? [] };
   const mounted = Boolean(draft && video.data && options.data && windowRange);
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
     let frame = 0;
+    // Parts left out are skipped, as in the render: checked every frame, and on the video's own time updates
+    // (frames come seldom in a window that is hidden or busy).
+    const skip = () => {
+      if (element.paused) return;
+      const part = range.current.cuts.find(([a, b]) => element.currentTime >= a && element.currentTime < b - 0.05);
+      if (part) element.currentTime = part[1];
+    };
     const tick = () => {
+      skip();
       setTime(element.currentTime);
       if (!element.paused && element.currentTime >= range.current.end) element.pause();
       frame = requestAnimationFrame(tick);
@@ -489,6 +512,7 @@ export default function Editor() {
     element.addEventListener("play", onPlay);
     element.addEventListener("pause", onPause);
     element.addEventListener("seeked", onSeeked);
+    element.addEventListener("timeupdate", skip);
     element.addEventListener("loadedmetadata", place);
     if (element.readyState >= 1) place();
     return () => {
@@ -496,6 +520,7 @@ export default function Editor() {
       element.removeEventListener("play", onPlay);
       element.removeEventListener("pause", onPause);
       element.removeEventListener("seeked", onSeeked);
+      element.removeEventListener("timeupdate", skip);
       element.removeEventListener("loadedmetadata", place);
     };
   }, [mounted]);
@@ -509,6 +534,27 @@ export default function Editor() {
     else if (before.end !== 0 && before.end !== draft.end) element.currentTime = Math.max(draft.start, draft.end - 0.05);
     previousRange.current = { start: draft.start, end: draft.end };
   }, [draft?.start, draft?.end, draft]);
+
+  // ---- leave a part out: from the playhead, then to the playhead ----------------------------------
+  const [leaveFrom, setLeaveFrom] = useState<number | null>(null);
+  useEffect(() => setLeaveFrom(null), [id]);
+  const startLeaving = () => setLeaveFrom(snap ? snapTime(time, sourceWords, "end") : time);
+  const endLeaving = () => {
+    if (leaveFrom === null || !draft) return;
+    const until = Math.min(snap ? snapTime(time, sourceWords, "start") : time, draft.end);
+    const from = Math.max(leaveFrom, draft.start);
+    if (until - from < 0.1) {
+      toast({ tone: "warn", title: "Nothing to leave out yet", body: "Play or move to where the part should end, after where it starts, then press …to here." });
+      return;
+    }
+    const parts = mergeParts([...(draft.settings.cuts ?? []), [from, until]], draft.start, draft.end);
+    if (draft.end - draft.start - parts.reduce((sum, [a, b]) => sum + b - a, 0) < 0.3) {
+      toast({ tone: "bad", title: "That would leave nothing to play", body: "Leave out a shorter part, or put another one back first." });
+      return;
+    }
+    setSettings({ cuts: parts });
+    setLeaveFrom(null);
+  };
 
   // ---- save and render ---------------------------------------------------------------------------
   const dirty = draft !== null && JSON.stringify(draft) !== saved;
@@ -607,9 +653,23 @@ export default function Editor() {
               <Button size="sm" variant="ghost" onClick={() => setWindowRange({ from: Math.max(0, draft.start - 45), to: Math.min(video.data.duration, draft.end + 45) })}>Show more around it</Button>
             </div>
             <Timeline from={windowRange.from} to={windowRange.to} start={draft.start} end={draft.end} time={time} envelope={timeline.data?.envelope ?? []}
-              loud={timeline.data?.loud_events ?? []} cuts={timeline.data?.cuts ?? []} words={sourceWords} snap={snap}
+              loud={timeline.data?.loud_events ?? []} cuts={timeline.data?.cuts ?? []} leftOut={draft.settings.cuts ?? []} words={sourceWords} snap={snap}
               onSeek={seek} onDragStart={remember} onRange={(start, end) => setRange(start, end, false)} />
             {timeline.data && !timeline.data.analysed && <p className="text-xs text-faint">No waveform: this video's working files were cleared. Analyse it again to bring the waveform back.</p>}
+            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              {leaveFrom === null ? (
+                <Button size="sm" variant="ghost" onClick={startLeaving} disabled={time < draft.start || time >= draft.end - 0.1}
+                  title="Mark where a part to leave out begins: where the playhead is now">
+                  <Scissors className="h-3.5 w-3.5" />Leave out a part from here…
+                </Button>
+              ) : (
+                <>
+                  <span className="text-muted">Leaving out from <span className="tabular text-ink">{clock(leaveFrom, true)}</span>. Play or move to where it should end, then</span>
+                  <Button size="sm" variant="primary" onClick={endLeaving}><Scissors className="h-3.5 w-3.5" />…to here</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setLeaveFrom(null)}>Cancel</Button>
+                </>
+              )}
+            </div>
             {(draft.settings.cuts ?? []).length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
                 <span className="text-muted">Left out:</span>
@@ -620,7 +680,7 @@ export default function Editor() {
                       onClick={() => setSettings({ cuts: (draft.settings.cuts ?? []).filter((_, other) => other !== index) })}><XCircle className="h-3.5 w-3.5" /></button>
                   </span>
                 ))}
-                <span className="text-xs text-faint">The preview plays these parts; the render leaves them out.</span>
+                <span className="text-xs text-faint">Skipped in the preview and left out of the render.</span>
               </div>
             )}
           </Card>

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..analysis import claude_review
+from ..analysis.answers import json_answers
 from ..analysis.describe import clean_words
 from ..errors import ClipForgeError, DependencyMissing
 from .captions import PRESET_LABELS, PRESETS, CaptionWord, resolve_style
@@ -731,12 +732,10 @@ def parse_answer(printed: str) -> Answer:
     if isinstance(envelope, dict) and envelope.get("is_error"):
         raise ClipForgeError(f"Claude could not make the change: {str(envelope.get('result') or '')[:200]}")
     text = str(envelope.get("result") or "") if isinstance(envelope, dict) else ""
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    try:
-        data = json.loads(match.group(0)) if match else None
-    except ValueError:
-        data = None
-    if not isinstance(data, dict) or not isinstance(data.get("changes") or {}, dict):
+    # the last block first: a correction comes after its draft
+    data = next((block for block in json_answers(text) if {"changes", "not_possible", "summary"} & set(block)),
+                None)
+    if data is None or not isinstance(data.get("changes") or {}, dict):
         raise ClipForgeError("Claude's answer could not be read, so nothing was changed. Try again.")
     reasons = data.get("not_possible") or []
     reasons = [reasons] if isinstance(reasons, str) else reasons if isinstance(reasons, list) else []

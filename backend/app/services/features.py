@@ -102,6 +102,9 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               "and the job says why. Switch it off in Settings." if claude_review.find_cli()
               else "The Claude Code command-line tool was not found. Install it and sign in; until then the local "
                    "rules pick the clips."),
+        _item("moments", "Clipping", "Clips from your own timestamps", "working",
+              "Type where a moment starts (or paste a link copied at that moment), or mark it in the player; "
+              "Claude ends it after the payoff and names it, then the usual captions, render and checks follow."),
         _item("chatgpt_second_opinion", "Clipping", "Second opinion: ChatGPT",
               "working" if chatgpt_review.find_cli() else "needs_setup",
               "ChatGPT checks the picks and may add up to two missed moments, through the Codex tool from the "
@@ -128,9 +131,21 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               if detector_available() else "The YuNet face detector model is missing; run scripts\\setup.ps1. "
                                            "Without it clips use the whole-frame layout."),
         _item("captions", "Editing", "Caption styles, emphasis, SRT and VTT", "working",
-              "Six styles, editable words, automatic fit to the frame, safe-area placement."),
+              "Six styles, editable words, automatic fit to the frame, safe-area placement; subtitles can be "
+              "switched on or off per clip."),
         _item("editor", "Editing", "Trim, captions, layout, re-render", "working",
-              "Trim on a waveform timeline, edit every caption word, change layout and style, undo and redo."),
+              "Trim on a waveform timeline, edit every caption word, change layout and style, leave parts out of "
+              "the middle, undo and redo."),
+        _item("prompt_edit", "Editing", "Prompt edit: describe a change in your own words",
+              "working" if claude_review.find_cli() else "needs_setup",
+              "Claude turns what you write into changes ClipForge can make (cut, parts left out, subtitles, hook, "
+              "layout, sound, title, thumbnail), each checked within the editor's limits, and the clip is rendered "
+              "again; one press undoes it. What it cannot do is said, never faked."
+              if claude_review.find_cli() else
+              "Needs the Claude Code command-line tool on this PC, signed in to your Claude plan."),
+        _item("thumbnails", "Editing", "A thumbnail for every clip", "working",
+              "Its best moment, framed like the clip, with two to six big words and one in colour, clear of faces "
+              "and of TikTok's buttons. Words in Arabic, Hebrew and similar scripts are not drawn yet."),
         _item("silence_removal", "Editing", "Silence removal", "working", "Cuts long pauses down to a short breath."),
         _item("quality_checks", "Editing", "Export quality checks", "working",
               "Playback, size, length, audio, black frames, silence, caption overflow, clipped words."),
@@ -159,6 +174,12 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
         *_publishing(session),
         _item("manual_export", "Publishing", "Manual export with post text", "working",
               "Download a clip or export to a folder with title, description, hashtags and source details."),
+        _item("tiktok_caption", "Publishing", "TikTok caption rewritten by Claude",
+              "working" if claude_review.find_cli() else "needs_setup",
+              "A new caption from what is said in the clip, with or without emojis and hashtags; the credit stays. "
+              "You can change it and save it with the clip." if claude_review.find_cli() else
+              "Needs the Claude Code command-line tool on this PC, signed in to your Claude plan. You can still "
+              "write and save your own caption."),
         _item("analytics", "Analytics", "Performance tracking", "planned",
               "Not built. No views or engagement numbers are shown anywhere until they come from a real source."),
         _item("strategist", "Analytics", "AI content strategist", "planned", "Not built."),
@@ -166,4 +187,8 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               "In-app notifications when clips are ready or a job fails."),
         _item("resume", "System", "Resumable processing", "working",
               "Interrupted jobs continue from saved audio, transcript parts and signals."),
+        _item("shutdown", "System", "Shut down button and desktop shortcut", "working",
+              "Shut down ClipForge from its menu when it was started with start.ps1 or the desktop shortcut (a "
+              "running job continues next time); scripts\\shortcut.ps1 puts a "
+              "ClipForge shortcut on your desktop that starts it, or just opens it when it is already running."),
     ]

@@ -312,6 +312,14 @@ export interface Timeline {
   analysed: boolean;
 }
 
+/** A preset of your own: the AI Clipper's options saved under a name. */
+export interface SavedPreset {
+  id: number;
+  name: string;
+  config: Record<string, string | number | boolean>;
+  created_at: string;
+}
+
 export interface Preset<T = Record<string, unknown>> {
   key: string;
   label: string;

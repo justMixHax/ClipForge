@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, query } from "./api";
 import type {
   Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PromptEditResult,
-  PublishOverview, PublishPost, SettingsBody, Video,
+  PublishOverview, PublishPost, SavedPreset, SettingsBody, Video,
 } from "./api";
 
 /** Refresh everything that can change when a job moves forward. */
@@ -29,6 +29,11 @@ export function useVideo(id: number | null) {
     queryFn: () => api.get<Video>(`/videos/${id}`),
     enabled: id !== null,
   });
+}
+
+/** Your own presets for the AI Clipper's options. */
+export function usePresets() {
+  return useQuery({ queryKey: ["presets"], queryFn: () => api.get<SavedPreset[]>("/presets") });
 }
 
 export function useProjects() {

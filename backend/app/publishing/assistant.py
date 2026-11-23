@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..analysis import claude_review
+from ..analysis.answers import json_answers
 from ..analysis.describe import credit_line, merge_hashtags, post_caption, tidy_caption
 from ..errors import ClipForgeError, DependencyMissing, NotFound
 from ..models import Clip, Video
@@ -69,12 +70,9 @@ def parse(printed: str) -> dict[str, Any]:
     if isinstance(envelope, dict) and envelope.get("is_error"):
         raise ClipForgeError(f"Claude could not write the text: {str(envelope.get('result') or '')[:200]}")
     text = str(envelope.get("result") or "") if isinstance(envelope, dict) else ""
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    try:
-        data = json.loads(match.group(0)) if match else None
-    except ValueError:
-        data = None
-    if not isinstance(data, dict):
+    # the last block first: a correction comes after its draft
+    data = next((block for block in json_answers(text) if {"title", "caption", "hashtags"} & set(block)), None)
+    if data is None:
         raise ClipForgeError("Claude's answer could not be read. Try again.")
     title = " ".join(str(data.get("title") or "").replace("<", "").replace(">", "").split())[:100]
     caption = str(data.get("caption") or "").strip()[:2200]

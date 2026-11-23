@@ -364,6 +364,18 @@ def test_features_are_reported_honestly(client: TestClient):
                for f in features)
 
 
+def test_the_newest_features_are_in_the_honest_status_list(client: TestClient):
+    features = {f["key"]: f for f in client.get("/api/system/features").json()}
+
+    for key in ("moments", "thumbnails", "shutdown"):
+        assert features[key]["status"] == "working", key
+    for key in ("tiktok_caption", "prompt_edit"):                     # they need the Claude Code tool on this PC
+        assert features[key]["status"] in ("working", "needs_setup"), key
+        assert features[key]["detail"], key
+    assert "leave parts out" in features["editor"]["detail"]
+    assert "on or off" in features["captions"]["detail"]
+
+
 def test_nothing_unbuilt_is_presented_as_merely_needing_setup(client: TestClient):
     def statuses() -> dict[str, str]:
         return {f["key"]: f["status"] for f in client.get("/api/system/features").json()}

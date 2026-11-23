@@ -5,6 +5,7 @@ into log files even if a caller logs a whole request by mistake.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -93,3 +94,21 @@ def setup_logging(logs_dir: Path, process_name: str, level: str = "INFO") -> Non
 class _MigrationBoilerplate(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return not record.getMessage().startswith(("Context impl", "Will assume"))
+
+
+def quiet_dropped_connections(loop: asyncio.AbstractEventLoop) -> None:
+    """A browser that drops a connection (skipping through a video does) makes asyncio on Windows log an error
+    with a traceback each time. It is harmless, and the lines buried real errors, so those two kinds are left
+    out. Everything else still goes where it went before."""
+    previous = loop.get_exception_handler()
+
+    def handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+        if (isinstance(context.get("exception"), (ConnectionResetError, ConnectionAbortedError))
+                and "connection_lost" in str(context.get("message", ""))):
+            return  # the browser went away; nothing else is silenced
+        if previous is not None:
+            previous(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)

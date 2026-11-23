@@ -41,14 +41,18 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
    your work.
 2. **2 · How to clip it.** Pick a preset (Fast Gaming Clips, Funny Streamer Moments, Podcast Highlights, ...)
    or set the kind of content, game, number of clips, clip length, minimum score, shape, layout and caption
-   style yourself. Press **Generate Clips**.
+   style yourself. **Save these settings as a preset** keeps them under a name of your own, next to the built-in
+   ones (the × on it removes it). Press **Generate Clips**.
 3. **Watch the stages.** Extracting audio → transcribing → measuring sound and picture → finding the best
    moments → rendering. You can cancel; if the app is closed mid-job it continues next time.
 4. **Review.** Each suggestion shows a 0–100 score, a confidence level, the reasons, the evidence
    (what was said, how the voice changed, where the payoff lands) and a breakdown of twelve sub-scores.
    Approve, reject, favourite, reorder, or tell it what was wrong (the feedback shifts future ranking).
 5. **Edit.** Trim on a waveform timeline, fix any caption word, change the caption style, font, colours,
-   layout, shape and hook title, with undo and redo. Save and render again. To take the subtitles off a clip
+   layout, shape and hook title, with undo and redo. To cut a part out of the middle, move the playhead to
+   where it starts and press **Leave out a part from here…**, then to where it ends and press **…to here**: it
+   shows as a striped band on the waveform, the preview skips it, and the render leaves it out. Save and render
+   again. To take the subtitles off a clip
    (or put them back), use the **Subtitles** switch in the clip's window and press **Confirm and render again**;
    the hook title keeps its own setting.
 
@@ -91,12 +95,12 @@ and what does not yet**.
 
 | | |
 |---|---|
-| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
+| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor, with parts left out of the middle · **your own presets** · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
 | **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip, so a moving subject is not followed. |
 | **Needs setup** | Nothing on this PC. On another PC with an NVIDIA card, speech-to-text on the graphics card needs `scripts\enable-gpu.ps1` run once (about 1.3 GB); until then it runs on the processor. |
 | **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). |
 | **Blocked by a third party** | TikTok direct posting: TikTok's rules for it exclude tools for posting to your own accounts. Drafts work instead. |
-| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · crops that follow a moving subject · saving your own presets |
+| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · crops that follow a moving subject |
 
 The full plan is in [ROADMAP.md](ROADMAP.md).
 

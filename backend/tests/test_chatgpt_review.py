@@ -331,3 +331,14 @@ def test_an_addition_with_nothing_said_in_it_is_refused():
                                            HighlightOptions(count=3, min_len=3, max_len=40), duration=END + 20)
 
     assert summary["added"] == []
+
+
+def test_a_reached_limit_says_when_chatgpt_works_again():
+    # what Codex said on 23 November 2026 when the ChatGPT Go plan's limit was reached
+    said = ("ERROR: You've hit your usage limit. Upgrade to Plus to continue using Codex "
+            "(https://chatgpt.com/explore/plus), or try again at Nov 30th, 2026 9:02 PM.")
+
+    error = chatgpt_review._explain(said)
+
+    assert "limit is reached" in error.message
+    assert "Nov 30th, 2026 9:02 PM" in error.hint

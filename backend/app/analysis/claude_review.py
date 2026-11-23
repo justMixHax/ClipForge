@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +23,7 @@ from pathlib import Path
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
+from .answers import json_answers, seconds
 from .describe import clean_caption, clean_hashtags, clean_words
 from .scoring import CATEGORY_LABELS
 
@@ -227,17 +227,21 @@ def parse_answer(printed: str) -> list[Pick]:
     text = str(envelope.get("result") or "")
     if envelope.get("is_error"):
         raise _explain(text or str(envelope)[:300])
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    try:
-        data = json.loads(match.group(0)) if match else None
-    except ValueError:
-        data = None
-    raw = data.get("picks") if isinstance(data, dict) else None
+    for data in json_answers(text):  # the last block first: a correction comes after its draft
+        picks = _picks(data.get("picks"))
+        if picks:
+            return picks
+    raise ClaudeUnavailable("Claude returned no picks, so the local rules picked the clips this time.",
+                            hint=text[:300])
+
+
+def _picks(raw: object) -> list[Pick]:
+    """The usable picks in one block of Claude's answer: times in seconds (or as a clock), end after start."""
     picks: list[Pick] = []
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
-        start, end = _number(item.get("start")), _number(item.get("end"))
+        start, end = seconds(item.get("start")), seconds(item.get("end"))
         if start is None or end is None or end <= start or start < 0:
             continue
         category = str(item.get("category") or "highlight").strip().lower().replace(" ", "_")
@@ -247,9 +251,6 @@ def parse_answer(printed: str) -> list[Pick]:
                           category=category if category in CATEGORY_LABELS else "highlight",
                           score=round(min(100.0, max(0.0, score if score is not None else 60.0)), 1),
                           reason=str(item.get("reason") or "").strip()[:400], **post_text(item)))
-    if not picks:
-        raise ClaudeUnavailable("Claude returned no picks, so the local rules picked the clips this time.",
-                                hint=text[:300])
     return picks
 
 

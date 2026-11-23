@@ -36,19 +36,19 @@ marked done because the code merely exists.
 | Automatic subtitles | ✅ | Six styles, burned in; SRT and VTT alongside |
 | Finished clip preview and download | ✅ | |
 | Speech-to-text on the graphics card | ✅ | Tested on an RTX 3060: about 4× faster than the processor with the small English model, and it finds the same moments. Another PC runs `scripts\enable-gpu.ps1` once |
-| Language-model review of candidates | ⬜ | Ranking is rule-based only |
+| Language-model review of candidates | ✅ | Claude picks the clips through your Claude plan, ChatGPT gives a second opinion; the local rules are the fallback |
 
 ## Milestone 3 · Advanced editing — mostly done
 
 | Deliverable | | Notes |
 |---|---|---|
-| Timeline editor | 🟡 | Trim both ends on a waveform with snapping to word gaps, undo and redo. Parts of the middle are left out with a prompt edit, and the editor lists them and puts them back; marking one by hand on the timeline is not built (automatic pause tightening is) |
+| Timeline editor | ✅ | Trim both ends on a waveform with snapping to word gaps, undo and redo. Leave parts of the middle out from the playhead to the playhead (or with a prompt edit): shown on the waveform, skipped by the preview, left out of the render, and each can be put back |
 | Caption editor | ✅ | Every word: text, emphasis, hide; style, font, colours, size, position |
 | Prompt edit | ✅ | Describe a change in your own words; Claude turns it into checked changes (cut, parts left out, subtitles and word spellings, hook title, layout, sound, title, thumbnail), the clip is rendered again and one press undoes it. What ClipForge cannot do (music, sound effects, speed) is said, never faked |
 | Clips from your own timestamps | ✅ | A start typed, marked in the player or pasted as a link with `?t=`; an optional end. Claude ends it after the payoff and names it (or the local rules do), ChatGPT gives its verdict, then captions, render and checks. A start or end inside a word moves to its edge |
 | Thumbnails | ✅ | One per clip, made with every render: the best moment framed like the clip, two to six big words with one in colour, clear of faces and of TikTok's buttons. Claude writes the words with a TikTok caption and hashtags; you can change words, colour and moment, download it, and it goes into exports |
 | Cropping and reframing | 🟡 | Four layouts, subject position, zoom, facecam box, automatic face finding. The crop is fixed for the clip and has only been checked on synthetic footage |
-| Editing presets | 🟡 | Six built-in workflows and four content presets. Saving your own is not built |
+| Editing presets | ✅ | Six built-in workflows and four content presets, and your own: save the AI Clipper's options under a name, use them again, remove them |
 | Batch processing | ✅ | Batch approve, reject, render, export, delete; several videos queue up |
 | Quality checks | ✅ | Eight checks after every render |
 | Who-is-speaking detection | ⬜ | |
@@ -124,7 +124,7 @@ need publishing or analytics show a dash.
 5. ~~Add an AI review of the candidates.~~ **Done on 22 November 2026, with Claude as the main engine**
    (your Claude plan, through the Claude Code tool on this PC). Prompted by your first real stream, where the
    local rules missed every funny moment. On that same stream it then found six genuinely funny moments where the rules had found none.
-6. **Saved presets and cutting out a middle section** in the editor.
+6. ~~Saved presets and cutting out a middle section in the editor.~~ **Done on 23 November 2026.**
 7. ~~YouTube Shorts upload, then the publishing queue and calendar.~~ **Built on 22 November 2026**, with
    TikTok drafts and Instagram Reels. Next there: connect your accounts and make the first real post on each,
    which is the real test.

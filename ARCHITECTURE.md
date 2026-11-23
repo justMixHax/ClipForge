@@ -87,6 +87,12 @@ which one to colour), a TikTok caption and hashtags, all cleaned before use: at 
 emoji on the thumbnail, a caption of one line without hashtags, and at most eight safe hashtags. If the tool is missing, signed out or
 over the plan's limit, the local picks are saved and the job says why.
 
+**Reading an AI's answer** (`analysis/answers.py`, used for Claude's picks, ChatGPT's opinion, the post text and
+the prompt edit): every JSON block in the answer is found, the last one first, because a correction comes after
+its draft; a block that does not read as written is tried once more with clock times (`28:35`) quoted, and times
+are read as seconds or as a clock. Both were seen for real: on two long streams Claude wrote a draft, then
+"Correction, here is the real answer", or times as a clock, and its picks were lost to the local rules.
+
 **ChatGPT's second opinion** (`analysis/chatgpt_review.py`): ChatGPT then gets the same transcript and the
 numbered picks, and answers "agree" or "disagree" with a reason for each, plus at most two missed moments.
 Nothing is removed: a disputed clip stays, marked "ChatGPT disagrees". It runs `codex exec` read-only, with
@@ -223,7 +229,7 @@ All under `/api`. Interactive documentation is at `http://localhost:3000/api/doc
 | Videos | upload (raw stream), check a link, import from a link, link from disk, list, read, update, delete, stream with seeking, thumbnail, analyze, transcript read and correct, timeline, make a clip by hand |
 | Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, still frame, thumbnail (see, download, make again with other words, another word in colour or another moment), TikTok caption rewritten by Claude (with or without emojis and hashtags; your own saved with the clip), prompt edit (your words → checked changes → rendered again) and its undo, caption words, SRT and VTT, post text, feedback |
 | Jobs | list, read, cancel, retry |
-| System | health, shut down (in order, as `stop.ps1` does), hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, speech-model install, dashboard, notifications, search, projects |
+| System | health, shut down (in order, as `stop.ps1` does), hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, your own presets (list, save under a name, remove; checked by the same rules as an analysis), speech-model install, dashboard, notifications, search, projects |
 
 Request and response bodies are typed Pydantic models (`schemas.py`). Errors are JSON with an `error` message
 written for a person and, where useful, a `hint` saying what to do.

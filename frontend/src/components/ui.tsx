@@ -143,14 +143,19 @@ export function NumberField({ value, onCommit, className, ...rest }: Omit<InputH
   );
 }
 
-export function Field({ label, hint, children, className }: { label: string; hint?: string; children: ReactNode; className?: string }) {
-  return (
-    <label className={cx("block", className)}>
+/** A form field with its title and hint. For a row of buttons (presets, shapes, styles) pass group: a label
+ * would press the first button whenever its title or hint is clicked. */
+export function Field({ label, hint, children, className, group = false }: { label: string; hint?: string; children: ReactNode; className?: string; group?: boolean }) {
+  const inner = (
+    <>
       <span className="mb-1.5 block text-[12.5px] font-medium text-muted">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-faint">{hint}</span>}
-    </label>
+    </>
   );
+  return group
+    ? <div role="group" aria-label={label} className={cx("block", className)}>{inner}</div>
+    : <label className={cx("block", className)}>{inner}</label>;
 }
 
 export function Switch({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (value: boolean) => void; label: string; hint?: string; disabled?: boolean }) {

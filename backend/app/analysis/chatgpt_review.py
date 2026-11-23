@@ -24,6 +24,7 @@ from typing import Any
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
+from .answers import json_answers, seconds
 from .claude_review import POST_FIELDS, POST_TEXT, Pick, clock, post_text
 from .scoring import CATEGORY_LABELS
 
@@ -226,8 +227,10 @@ def _explain(text: str) -> ChatGPTUnavailable:
         return ChatGPTUnavailable("ChatGPT is signed out on this PC, so there is no second opinion this time.",
                                   hint=SIGN_IN_HINT)
     if any(k in low for k in ("usage limit", "rate limit", "limit reached", "429", "quota")):
+        when = re.search(r"try again (?:at|after|in) ([^\n]{3,60}?)\.?\s*$", said, flags=re.IGNORECASE)
         return ChatGPTUnavailable("Your ChatGPT plan's limit is reached, so there is no second opinion this time.",
-                                  hint="Analyse again after the limit resets.")
+                                  hint=f"ChatGPT works again from {when.group(1)}; the picks are kept unchecked until "
+                                       "then." if when else "Analyse again after the limit resets.")
     return ChatGPTUnavailable("ChatGPT gave an unexpected answer, so there is no second opinion this time.",
                               hint=said[:300])
 
@@ -242,12 +245,9 @@ def _number(value: Any) -> float | None:
 
 def parse_answer(text: str) -> Review:
     """Read ChatGPT's answer. Raises ChatGPTUnavailable when there is nothing usable."""
-    match = re.search(r"\{.*\}", text or "", flags=re.S)
-    try:
-        data = json.loads(match.group(0)) if match else None
-    except ValueError:
-        data = None
-    if not isinstance(data, dict) or not ({"verdicts", "additions"} & set(data)):
+    # the last block first: a correction comes after its draft
+    data = next((block for block in json_answers(text or "") if {"verdicts", "additions"} & set(block)), None)
+    if data is None:
         raise _explain(text or "no answer")
     if not isinstance(data.get("verdicts", []), list) or not isinstance(data.get("additions", []), list):
         raise ChatGPTUnavailable("ChatGPT answered in an unexpected shape, so there is no second opinion this time.",
@@ -263,7 +263,7 @@ def parse_answer(text: str) -> Review:
     for item in data.get("additions") or []:
         if not isinstance(item, dict):
             continue
-        start, end = _number(item.get("start")), _number(item.get("end"))
+        start, end = seconds(item.get("start")), seconds(item.get("end"))
         if start is None or end is None or end <= start or start < 0:
             continue
         category = str(item.get("category") or "highlight").strip().lower().replace(" ", "_")

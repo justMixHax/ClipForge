@@ -14,6 +14,8 @@ type Props = {
   envelope: number[];
   loud: { start: number; end: number; peak_db: number }[];
   cuts: number[];
+  /** Parts left out of the clip, drawn as darker striped bands. */
+  leftOut?: [number, number][];
   words: TimedWord[];
   snap: boolean;
   onSeek: (time: number) => void;
@@ -38,7 +40,7 @@ export function snapTime(t: number, words: TimedWord[], edge: "start" | "end", r
   return best;
 }
 
-export function Timeline({ from, to, start, end, time, envelope, loud, cuts, words, snap, onSeek, onDragStart, onRange }: Props) {
+export function Timeline({ from, to, start, end, time, envelope, loud, cuts, leftOut = [], words, snap, onSeek, onDragStart, onRange }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
@@ -121,6 +123,10 @@ export function Timeline({ from, to, start, end, time, envelope, loud, cuts, wor
         <span className="pointer-events-none absolute top-0 h-full bg-black/45" style={{ left: 0, width: Math.max(0, x(start)) }} />
         <span className="pointer-events-none absolute top-0 h-full bg-black/45" style={{ left: x(end), right: 0 }} />
         <span className="pointer-events-none absolute top-0 h-full border-y-2 border-accent" style={{ left: x(start), width: Math.max(0, x(end) - x(start)) }} />
+        {leftOut.map(([a, b]) => (
+          <span key={`${a}-${b}`} title={`Left out: ${clock(a, true)} – ${clock(b, true)}`} className="absolute top-0 h-full bg-black/55"
+            style={{ left: x(a), width: Math.max(2, x(b) - x(a)), backgroundImage: "repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,0.09) 6px 8px)" }} />
+        ))}
         <span role="slider" tabIndex={0} aria-label="Clip start" aria-valuenow={Number(start.toFixed(2))} className={handle} style={{ left: x(start) }}
           onPointerDown={grab("start")} onPointerMove={moveHandle} onPointerUp={release} onKeyDown={nudge("start")}>
           <span className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 rounded bg-accent" />

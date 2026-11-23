@@ -36,6 +36,21 @@ function Logo() {
   );
 }
 
+function NavItem({ to, label, icon: Icon, built, onNavigate }: (typeof NAV)[number] & { onNavigate?: () => void }) {
+  return (
+    <NavLink to={to} end={to === "/"} onClick={onNavigate} title={built ? undefined : "Not built yet: this page says what is planned"}
+      className={({ isActive }) => cx("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] transition-colors",
+        isActive ? "bg-raised text-ink" : built ? "text-muted hover:bg-hover hover:text-ink" : "text-faint hover:bg-hover hover:text-muted")}>
+      {({ isActive }) => (
+        <>
+          <Icon className={cx("h-4 w-4 shrink-0", isActive ? "text-accent" : built ? "text-faint group-hover:text-muted" : "text-faint/70")} />
+          <span className="flex-1 truncate">{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
 function Sidebar({ onNavigate, onShutDown }: { onNavigate?: () => void; onShutDown: () => void }) {
   const jobs = useActiveJobs().data ?? [];
   const running = jobs.find((job) => job.status === "running");
@@ -43,18 +58,10 @@ function Sidebar({ onNavigate, onShutDown }: { onNavigate?: () => void; onShutDo
     <div className="flex h-full flex-col gap-5 px-3 py-4">
       <Logo />
       <nav className="flex-1 space-y-0.5 overflow-y-auto" aria-label="Main">
-        {NAV.map(({ to, label, icon: Icon, built }) => (
-          <NavLink key={to} to={to} end={to === "/"} onClick={onNavigate}
-            className={({ isActive }) => cx("group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] transition-colors", isActive ? "bg-raised text-ink" : "text-muted hover:bg-hover hover:text-ink")}>
-            {({ isActive }) => (
-              <>
-                <Icon className={cx("h-4 w-4 shrink-0", isActive ? "text-accent" : "text-faint group-hover:text-muted")} />
-                <span className="flex-1 truncate">{label}</span>
-                {!built && <span className="rounded border border-line px-1.5 text-[10px] uppercase tracking-wide text-faint" title="Not built yet">Planned</span>}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {/* what works first; what is planned in its own group, so every name shows in full */}
+        {NAV.filter((item) => item.built).map((item) => <NavItem key={item.to} {...item} onNavigate={onNavigate} />)}
+        <p className="px-2.5 pb-1 pt-4 text-[10.5px] font-medium uppercase tracking-[0.12em] text-faint">Coming later</p>
+        {NAV.filter((item) => !item.built).map((item) => <NavItem key={item.to} {...item} onNavigate={onNavigate} />)}
       </nav>
       <div className="rounded-xl border border-line bg-bg/60 p-3">
         {running ? (

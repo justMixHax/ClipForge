@@ -6,6 +6,7 @@ address is whatever its --host says, so keep that on 127.0.0.1.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -20,7 +21,7 @@ from . import __version__, db
 from .api import clips, jobs, publishing, system, videos
 from .config import check_bind, get_settings
 from .errors import ClipForgeError
-from .logging_config import setup_logging
+from .logging_config import quiet_dropped_connections, setup_logging
 from .services.supervisor import WorkerSupervisor
 
 log = logging.getLogger("clipforge.api")
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):  # noqa: ANN202
+        quiet_dropped_connections(asyncio.get_running_loop())
         if settings.spawn_worker:
             app.state.worker = WorkerSupervisor()
             app.state.worker.start()

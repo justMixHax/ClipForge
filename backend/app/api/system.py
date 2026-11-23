@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -24,8 +25,9 @@ from ..editing.fonts import available_fonts
 from ..editing.reframe import ASPECTS, LAYOUT_LABELS
 from ..errors import ClipForgeError, Conflict, NotFound
 from ..jobs import queue
-from ..models import FEEDBACK_LABELS, Account, Clip, Feedback, Job, Notification, Post, Project, Video
-from ..schemas import CleanupIn, ProjectIn, ProjectOut, ProjectPatch, SecretIn, SettingsIn
+from ..models import FEEDBACK_LABELS, Account, Clip, Feedback, Job, Notification, Post, Preset, Project, Video
+from ..schemas import (SAVED_OPTIONS, AnalyzeIn, CleanupIn, PresetIn, PresetOut, ProjectIn, ProjectOut, ProjectPatch,
+                       SecretIn, SettingsIn)
 from ..services import hardware, settings_store, storage
 from ..services.features import feature_status
 from ..transcription import models as speech_models
@@ -380,5 +382,55 @@ def delete_project(project_id: int, session: Session = Depends(get_db)) -> dict:
     if project is None:
         raise NotFound("That project does not exist")
     session.delete(project)
+    session.commit()
+    return {"deleted": True}
+
+
+# ----------------------------------------------------------------------------------------- your presets
+MAX_PRESETS = 50
+
+
+@router.get("/presets", response_model=list[PresetOut])
+def list_presets(session: Session = Depends(get_db)) -> list[Preset]:
+    """Your own presets for the AI Clipper's options, by name."""
+    return sorted(session.scalars(select(Preset)), key=lambda preset: preset.name.lower())
+
+
+@router.post("/presets", response_model=PresetOut)
+def save_preset(body: PresetIn, session: Session = Depends(get_db)) -> Preset:
+    """Save the clipping options under a name. They are checked by the same rules as an analysis, so the preset
+    always works when it is used. Saving again under the same name (whatever its capitals) updates it."""
+    name = " ".join(body.name.split())
+    if not name:
+        raise ClipForgeError("Give the preset a name.")
+    try:
+        options = AnalyzeIn.model_validate(body.config)
+    except ValidationError as exc:
+        problem = exc.errors()[0]
+        where = ".".join(str(part) for part in problem.get("loc", ())) or "options"
+        raise ClipForgeError(f"This preset would not work ({where}: {problem.get('msg', 'not valid')}).") from None
+    if options.game_style and options.game_style not in GAME_STYLES:
+        raise ClipForgeError(f"There is no game called “{options.game_style}” in ClipForge's list.")
+    config = options.model_dump(include=set(SAVED_OPTIONS))
+    existing = next((p for p in session.scalars(select(Preset)) if p.name.lower() == name.lower()), None)
+    if existing is None:
+        if (session.scalar(select(func.count(Preset.id))) or 0) >= MAX_PRESETS:
+            raise ClipForgeError(f"You can keep up to {MAX_PRESETS} presets. Remove one you no longer use first.")
+        existing = Preset(name=name, config=config)
+        session.add(existing)
+    else:
+        existing.name, existing.config = name, config
+    session.commit()
+    session.refresh(existing)
+    log.info("preset saved", extra={"preset_id": existing.id})
+    return existing
+
+
+@router.delete("/presets/{preset_id}")
+def delete_preset(preset_id: int, session: Session = Depends(get_db)) -> dict:
+    preset = session.get(Preset, preset_id)
+    if preset is None:
+        raise NotFound("That preset no longer exists.")
+    session.delete(preset)
     session.commit()
     return {"deleted": True}

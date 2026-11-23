@@ -1,6 +1,6 @@
 // The main workspace: pick a video, choose how to clip it, press Generate, review the ranked results.
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, HardDrive, RotateCcw, ShieldAlert, Sparkles, UploadCloud, Wand2 } from "lucide-react";
+import { Bookmark, BookmarkPlus, FolderOpen, HardDrive, RotateCcw, ShieldAlert, Sparkles, UploadCloud, Wand2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ClipCard, ClipViewer, RightsBadge, SourcePeek, useClipActions } from "../components/clips";
@@ -10,9 +10,9 @@ import { MomentClip, type MomentTimes } from "../components/MomentClip";
 import { VideoWorkLog } from "../components/WorkLog";
 import { ProjectSelect } from "../components/projects";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Field, Input, Progress, Segmented, Select, Switch, useToast } from "../components/ui";
-import { api, uploadVideo, type Clip, type Job, type Video } from "../lib/api";
+import { api, uploadVideo, type Clip, type Job, type SavedPreset, type Video } from "../lib/api";
 import { bytes, clock, cx, duration } from "../lib/format";
-import { useActiveJobs, useClips, useOptions, useRefreshAll, useSettings, useVideo, useVideos } from "../lib/hooks";
+import { useActiveJobs, useClips, useOptions, usePresets, useRefreshAll, useSettings, useVideo, useVideos } from "../lib/hooks";
 
 type ClipOptions = {
   workflow: string;
@@ -214,17 +214,73 @@ function OptionsPanel({ value, onChange }: { value: ClipOptions; onChange: (next
     onChange({ ...value, ...preset.config, workflow: key });
   };
   const preset = options?.content_presets.find((p) => p.key === value.content_preset);
+  const saved = usePresets();
+  const toast = useToast();
+  const [naming, setNaming] = useState<string | null>(null);  // the name being typed, while saving a preset
+  const [saving, setSaving] = useState(false);
+  const mine = saved.data?.find((p) => `saved-${p.id}` === value.workflow);
+  const applySaved = (p: SavedPreset) => onChange({ ...value, ...p.config, workflow: `saved-${p.id}` });
+  const savePreset = async () => {
+    const name = (naming ?? "").trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      const { workflow: _workflow, ...config } = value;
+      const made = await api.post<SavedPreset>("/presets", { name, config });
+      await saved.refetch();
+      onChange({ ...value, workflow: `saved-${made.id}` });
+      setNaming(null);
+      toast({ tone: "good", title: "Preset saved", body: `“${made.name}” is now under Start from a preset.` });
+    } catch (error) {
+      toast({ tone: "bad", title: "Could not save the preset", body: (error as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const removePreset = async (p: SavedPreset) => {
+    if (!window.confirm(`Remove your preset “${p.name}”? Clips already made with it stay as they are.`)) return;
+    try {
+      await api.del(`/presets/${p.id}`);
+      await saved.refetch();
+      if (value.workflow === `saved-${p.id}`) onChange({ ...value, workflow: "custom" });
+    } catch (error) {
+      toast({ tone: "bad", title: "Could not remove the preset", body: (error as Error).message });
+    }
+  };
+  const chip = (active: boolean) => cx("rounded-full border text-[12.5px] transition-colors", active ? "border-accent/60 bg-accent/10 text-accent-soft" : "border-line text-muted hover:border-line-strong hover:text-ink");
   return (
     <div className="space-y-4">
-      <Field label="Start from a preset" hint={options?.workflow_presets.find((p) => p.key === value.workflow)?.description ?? "Your own settings."}>
+      <Field label="Start from a preset" group hint={mine ? `Your preset “${mine.name}”.` : options?.workflow_presets.find((p) => p.key === value.workflow)?.description ?? "Your own settings."}>
         <div className="flex flex-wrap gap-1.5">
           {options?.workflow_presets.map((p) => (
-            <button key={p.key} type="button" onClick={() => applyWorkflow(p.key)}
-              className={cx("rounded-full border px-3 py-1 text-[12.5px] transition-colors", value.workflow === p.key ? "border-accent/60 bg-accent/10 text-accent-soft" : "border-line text-muted hover:border-line-strong hover:text-ink")}>
+            <button key={p.key} type="button" onClick={() => applyWorkflow(p.key)} className={cx(chip(value.workflow === p.key), "px-3 py-1")}>
               {p.label}
             </button>
           ))}
+          {saved.data?.map((p) => (
+            <span key={p.id} className={cx(chip(value.workflow === `saved-${p.id}`), "inline-flex items-center")}>
+              <button type="button" onClick={() => applySaved(p)} className="inline-flex items-center gap-1 py-1 pl-2.5 pr-1" title="Your own preset">
+                <Bookmark className="h-3 w-3" />{p.name}
+              </button>
+              <button type="button" onClick={() => removePreset(p)} className="mr-1 rounded-full p-0.5 text-faint hover:bg-hover hover:text-ink" title={`Remove your preset “${p.name}”`} aria-label={`Remove your preset ${p.name}`}>
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
         </div>
+        {naming === null ? (
+          <button type="button" onClick={() => setNaming("")} className="mt-2 inline-flex items-center gap-1.5 text-xs text-accent-soft hover:underline">
+            <BookmarkPlus className="h-3.5 w-3.5" />Save these settings as a preset
+          </button>
+        ) : (
+          <div className="mt-2 flex items-center gap-2">
+            <Input autoFocus value={naming} maxLength={60} placeholder="Name, e.g. My GTA streams" aria-label="Preset name"
+              onChange={(event) => setNaming(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") savePreset(); if (event.key === "Escape") setNaming(null); }} />
+            <Button size="sm" variant="primary" onClick={savePreset} busy={saving} disabled={!naming.trim()}>Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => setNaming(null)} disabled={saving}>Cancel</Button>
+          </div>
+        )}
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
@@ -253,13 +309,14 @@ function OptionsPanel({ value, onChange }: { value: ClipOptions; onChange: (next
         <input type="range" min={0} max={90} step={5} value={value.min_score} onChange={(event) => set("min_score", Number(event.target.value))} className="w-full" />
       </Field>
 
+      {/* one row each: side by side they ran out of the card */}
+      <Field label="Shape" group>
+        <Segmented className="w-full [&>button]:flex-1" value={value.aspect} onChange={(v) => set("aspect", v)} options={(options?.aspects ?? []).map((a) => ({ value: a.key, label: a.key, title: `${a.width}×${a.height}` }))} />
+      </Field>
+      <Field label="Encode for" group>
+        <Segmented className="w-full [&>button]:flex-1" value={value.quality} onChange={(v) => set("quality", v)} options={[{ value: "speed", label: "Speed" }, { value: "balanced", label: "Balanced" }, { value: "quality", label: "Quality" }]} />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Shape">
-          <Segmented value={value.aspect} onChange={(v) => set("aspect", v)} options={(options?.aspects ?? []).map((a) => ({ value: a.key, label: a.key, title: `${a.width}×${a.height}` }))} />
-        </Field>
-        <Field label="Encode for">
-          <Segmented value={value.quality} onChange={(v) => set("quality", v)} options={[{ value: "speed", label: "Speed" }, { value: "balanced", label: "Balanced" }, { value: "quality", label: "Quality" }]} />
-        </Field>
         <Field label="Layout" hint="Automatic looks for a face or facecam in each clip.">
           <Select value={value.layout} onChange={(event) => set("layout", event.target.value)}>
             {options?.layouts.map((l) => <option key={l.key} value={l.key} disabled={l.key === "split"}>{l.label}{l.key === "split" ? " (auto only)" : ""}</option>)}

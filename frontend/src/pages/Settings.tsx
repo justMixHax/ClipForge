@@ -236,7 +236,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader title="Processing" icon={<SlidersHorizontal className="h-4 w-4 text-faint" />} />
           <div className="space-y-4 px-5 pb-5">
-            <Field label="Priority" hint="Speed uses quicker encodes; quality takes longer for smaller, cleaner files.">
+            <Field label="Priority" group hint="Speed uses quicker encodes; quality takes longer for smaller, cleaner files.">
               <Segmented value={String(v("processing.priority"))} onChange={(value) => save({ "processing.priority": value })}
                 options={[{ value: "speed", label: "Speed" }, { value: "balanced", label: "Balanced" }, { value: "quality", label: "Quality" }]} />
             </Field>
@@ -330,12 +330,12 @@ export default function SettingsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="AI providers" icon={<KeyRound className="h-4 w-4 text-faint" />} hint="Not needed: Claude already picks the clips through your Claude plan (see Processing). Keys stored here are kept for a planned option and are not used today; no paid request is ever sent." />
+          <CardHeader title="Keys for planned options" icon={<KeyRound className="h-4 w-4 text-faint" />} hint="Not needed today: Claude already picks the clips through your Claude plan (see Processing). Keys stored here wait for planned options and are not used; no paid request is ever sent." />
           <div className="space-y-4 px-5 pb-5">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Provider">
+              <Field label="Another AI provider (planned)">
                 <Select value={String(v("llm.provider"))} onChange={(event) => save({ "llm.provider": event.target.value })}>
-                  <option value="none">None (local scoring only)</option><option value="ollama">Ollama (local)</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option>
+                  <option value="none">None</option><option value="ollama">Ollama (local)</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option>
                 </Select>
               </Field>
               <Field label="Model name">

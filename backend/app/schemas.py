@@ -155,6 +155,23 @@ class AnalyzeIn(Strict):
         return value
 
 
+# the clipping options a preset of your own keeps (the AI Clipper's "How to clip it")
+SAVED_OPTIONS = ("content_preset", "game_style", "count", "length", "min_score", "aspect", "layout", "captions",
+                 "quality", "auto_render", "remove_silence", "show_hook")
+
+
+class PresetIn(Strict):
+    name: str = Field(min_length=1, max_length=60)
+    config: dict[str, Any]
+
+
+class PresetOut(FromRow):
+    id: int
+    name: str
+    config: dict[str, Any]
+    created_at: datetime
+
+
 class MomentIn(Strict):
     """A moment you chose. Times can be typed (1:02:15, 62:15, 3735, 1h2m15s) or pasted as a link shared at
     that moment. Without an end, ClipForge finds one inside your clip length."""
