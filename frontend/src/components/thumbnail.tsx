@@ -33,12 +33,14 @@ export function ThumbnailPanel({ clip, frameTime }: {
   const [word, setWord] = useState(clip.cover_word);
   const [at, setAt] = useState<number | null>(clip.cover_time);
   const [pending, setPending] = useState<"make" | "best" | null>(null);
+  useEffect(() => setShown(clip), [clip]);
+  // What you are typing stays while the clip updates (a render moving along, a refresh); only words or a moment
+  // saved anew replace it.
   useEffect(() => {
-    setShown(clip);
     setText(clip.cover_text);
     setWord(clip.cover_word);
     setAt(clip.cover_time);
-  }, [clip]);
+  }, [clip.id, clip.cover_text, clip.cover_word, clip.cover_time]);
 
   const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
   const coloured = bare(word.toUpperCase());

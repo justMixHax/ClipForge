@@ -190,18 +190,23 @@ export function Segmented<T extends string>({ value, onChange, options, classNam
 // ----------------------------------------------------------------------------------------------- Modal
 export function Modal({ open, onClose, title, children, wide = false, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean; footer?: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null);
+  // The page behind redraws every second while a job runs, and gives a new onClose each time. Keeping the
+  // latest one here lets the effect below run only when the window opens, so it never takes the cursor out of
+  // a box you are typing in.
+  const closer = useRef(onClose);
+  useEffect(() => { closer.current = onClose; }, [onClose]);
   useEffect(() => {
     if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && closer.current();
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    panel.current?.focus();
+    if (!panel.current?.contains(document.activeElement)) panel.current?.focus();  // a box that asked for it keeps it
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade" role="dialog" aria-modal="true" aria-label={title}>
