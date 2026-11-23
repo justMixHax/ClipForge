@@ -8,15 +8,15 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 776 tests, plus a type-check of the interface. No speech model is needed;
+The fast suite: 792 tests, plus a type-check of the interface. No speech model is needed;
 tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 784
-tests, about five and a half minutes. They need the sample video, which is not kept in Git:
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 800
+tests, about five minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
@@ -25,8 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 22 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 784 passed,
-0 failed, 0 skipped, in 5 minutes 31 seconds.
+**Last full run:** 23 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 800 passed,
+0 failed, 0 skipped, in 4 minutes 48 seconds.
 
 ## How the tests are built
 
@@ -48,18 +48,18 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 |---|---|---|
 | `test_scoring.py`, `test_engine.py`, `test_engine_action.py`, `test_candidates.py`, `test_dedupe.py`, `test_lexicon.py` | 78 | The highlight engine: a hook beats a filler opening, loudness alone does not win, a payoff needs a setup, clips start and end on sentences, the same story is not suggested twice, titles and hooks use only spoken words, videos without speech still get suggestions; where almost nothing is said, loud and busy moments fill the free places without cutting a sentence, and loud talk is never brought in that way |
 | `test_sentences.py`, `test_transcribe.py`, `test_align.py` | 40 | Sentence building, windowed transcription with resume after a failure or cancellation, correction of word timings |
-| `test_audio_features.py`, `test_visual_features.py` | 14 | Loudness against the local baseline, silences, loud events, motion, scene cuts |
+| `test_audio_features.py`, `test_visual_features.py` | 16 | Loudness against the local baseline, silences, loud events, motion, scene cuts; the faster decoding measures the same as full decoding, and a file that refuses it is read in full |
 | `test_captions.py` | 29 | All six styles, emphasis, wrapping and fitting, safe area, hook titles, masking on screen only, SRT and VTT |
-| `test_reframe.py` | 142 | Layout decisions and crop maths for every shape and layout, facecam detection on synthetic frames |
+| `test_reframe.py` | 149 | Layout decisions and crop maths for every shape and layout, facecam detection on synthetic frames; the gameplay under the camera leaves out the stream's own facecam in every corner when that costs little, and stays centred when it would cost too much |
 | `test_render.py` | 28 | Real renders: every layout at every shape, frame-accurate cuts, joined segments, caption placement and width for every font, silent sources, volume levelling, noise reduction, frame rate, cancellation, failure clean-up |
 | `test_qc.py` | 8 | The export checks catch wrong size, wrong length, missing sound, black frames, silence |
 | `test_pipeline.py` | 14 | The whole analyse and render jobs: stored results, re-use of the transcript, re-analysis keeping what you approved, cancellation, missing source, missing model, render failure, fallback from graphics card to processor, pause on shutdown |
 | `test_queue.py` | 14 | Claiming, progress, heartbeat, cancel, retry, recovery of interrupted jobs, attempt limit |
 | `test_api.py`, `test_api_library.py` | 67 | Upload and its rejections, linking from disk, playback with seeking, clips, captions, feedback, batch actions, manual order, variants, caption files, post text, export, projects, cleanup, storage, settings, search, cross-site and wrong-host requests, persistence across a restart, honest feature status |
 | `test_downloader.py`, `test_import.py` | 69 | Importing from a link, with the real downloader against a web site started on this PC for the test: download, progress, cancel, size limit, missing video, page without a video, unreachable site; which links are accepted; failures explained in plain words; the import job with source and rights stored, duplicates, disk-space check, pause and resume; the API refusing to start without a stated right to clip |
-| `test_timecode.py`, `test_moments.py` | 67 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log |
+| `test_timecode.py`, `test_moments.py` | 69 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word, never leaving less than a second of clip; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log |
 | `test_publishing_adapters.py` | 29 | YouTube, TikTok and Instagram against stand-ins of their APIs built from the documentation: sign-in with PKCE (checked against the standard's own example), token renewal, a resumable upload that continues after a break, a retried post that resumes instead of uploading twice, TikTok's chunk rules, a Reel never published twice, quota and refusal messages |
-| `test_publishing_service.py`, `test_publishing_api.py` | 45 | The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; Claude's post text; honest feature status and dashboard numbers |
+| `test_publishing_service.py`, `test_publishing_api.py` | 46 | The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; date ranges by when a post goes live; Claude's post text; honest feature status and dashboard numbers |
 | `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 45 | File-name and path safety, encrypted credentials, masking of credentials in logs, where the server listens and how it stops |
 | `test_claude_review.py` and the Claude tests in `test_pipeline.py` | 16 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained, and the local rules take over when Claude cannot be reached |
 | `test_ffmpeg_service.py`, `test_hardware.py` | 16 | Probing, progress, error reporting, encoder tests, the graphics card is only recommended after passing its test |
@@ -156,6 +156,18 @@ passed.
 The Publishing Studio's three pages were checked in the browser: the accounts with their setup steps, the
 composer with your approved clips, and the calendar. No real post has been made: no account is connected yet.
 
+## Framing and speed on real footage, 23 November 2026
+
+- **Framing.** One frame from each of four rendered clips of real streams (Jynxzi's GTA RP twice, a Rainbow Six
+  stream, Tyler1's desk stream): the camera panel on top was right in all four, but in three the gameplay
+  panel underneath showed the stream's own facecam a second time, in its corner. After the fix, copies of
+  two of those clips were rendered again: the gameplay panel was clean, the crosshair and the car still in
+  view, the render note said what was done, and all 8 checks passed. The copies were then deleted.
+- **Speed.** Measuring the picture of the 2-hour 1080p60 stream took 121 s with the faster decoding, against
+  about 220 s before. Compared with the earlier measurement of the same stream: motion agrees at a
+  correlation of 0.998, the activity scale within 1%, and 128 of 133 scene cuts within a second (the others
+  were borderline). The graphics card was tried too and was slower here (it decodes every frame).
+
 ## Code reviews by ChatGPT
 
 Since 22 November 2026, changes are reviewed by ChatGPT (GPT-6.2 Astra, through Codex) before they are
@@ -163,7 +175,9 @@ committed: `scripts\review.ps1`. The reviews are kept in `reviews/`. The first o
 and the work log, found 11 real problems (4 serious), including that a "Local rules only" setup would have
 started sending transcripts to ChatGPT. All were fixed in the same change, each with a test. A second review
 of the fixed version found 11 narrower points; 10 were fixed the same way and one was declined with a reason
-(noted in the review file).
+(noted in the review file). A third review, of the publishing commit on 23 November, ran on gpt-5.6-terra
+because the ChatGPT plan no longer offered Astra that day; it found 3 real problems (1 serious), all fixed with
+tests.
 
 ## Defects the tests found
 
@@ -182,6 +196,9 @@ Kept here because a test suite that never finds anything proves little.
 | Importing a 2-hour YouTube stream | YouTube refused the download part-way (HTTP 403) although the video was fine, and the import failed at 4% | Yes: the download asks again for fresh addresses and continues the partial file, up to 4 tries (simulated with a local test site that refuses requests) |
 | Making a clip from a typed timestamp on a real stream | A start typed in whole seconds opened the clip on half a word (the quality check caught it) | Yes: a start or end inside a word moves to the word's edge, at most 0.6 s, and the work log says so |
 | Reading the publishing code before committing | A post whose app credentials had been removed, or whose follow-up check failed in a way nobody expected, stayed due and would have been tried again every 10 seconds | Yes: it fails once, with the reason; two tests |
+| ChatGPT's review of the publishing commit (23 November) | A new YouTube upload sent no Content-Range header (the stand-in YouTube accepted that; the real one may not); the word rule could squeeze a one-second selection below a second or put a start past the end; the post list's date filter ignored when a post went live | Yes, each with a test; the stand-in YouTube now refuses an upload without Content-Range |
+| Looking at real rendered clips | The gameplay panel under the facecam showed the stream's own facecam a second time | Yes: slid away from it, or cut just above it, when that costs little |
+| A morning when the chosen ChatGPT model was not offered | ClipForge said only "unexpected answer" and showed Codex's start-up banner; a token-refresh warning earlier in Codex's log could even make it claim a sign-out | Yes: Codex's final error decides, the reason is named, and Settings lists the models the plan offers |
 | Real-model transcription test | The speech model occasionally returns a word with no duration or one stretched across a pause | Yes: word times are corrected against the audio |
 
 ## Not tested

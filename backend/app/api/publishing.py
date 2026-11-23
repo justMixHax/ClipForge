@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -153,10 +153,11 @@ def list_posts(status: str | None = Query(None, max_length=30), start: datetime 
     query = select(Post).order_by(Post.id.desc())
     if status:
         query = query.where(Post.status == status)
+    live = func.coalesce(Post.scheduled_at, Post.published_at, Post.created_at)  # as the calendar places it
     if start is not None:
-        query = query.where(or_(Post.scheduled_at >= start, Post.published_at >= start, Post.created_at >= start))
+        query = query.where(live >= _utc(start))
     if end is not None:
-        query = query.where(or_(Post.scheduled_at <= end, Post.created_at <= end))
+        query = query.where(live <= _utc(end))
     return [post_out(p) for p in session.scalars(query.limit(limit))]
 
 

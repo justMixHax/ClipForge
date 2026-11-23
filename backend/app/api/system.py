@@ -94,6 +94,14 @@ def test_ai_connections(session: Session = Depends(get_db)) -> dict:
         return {"claude": claude.result(), "chatgpt": chatgpt.result()}
 
 
+@router.get("/system/ai/chatgpt-models")
+def chatgpt_models() -> dict:
+    """The ChatGPT models this PC's ChatGPT sign-in was last offered (from the Codex tool's own list)."""
+    from ..analysis import chatgpt_review
+
+    return {"offered": chatgpt_review.offered_models()}
+
+
 @router.get("/system/features")
 def features(session: Session = Depends(get_db)) -> list[dict]:
     return feature_status(session)

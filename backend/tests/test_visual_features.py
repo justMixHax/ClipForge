@@ -77,3 +77,48 @@ def test_features_survive_a_round_trip_to_disk(tmp_path: Path):
     assert np.allclose(loaded.motion, feats.motion)
     assert loaded.cuts == feats.cuts
     assert loaded.fps == feats.fps
+
+
+# ------------------------------------------------------------- faster decoding for long streams
+def stream_like_video(path: Path) -> Path:
+    """Moving picture then a hard cut, encoded with B-frames the way stream recordings are."""
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-f", "lavfi", "-t", "6", "-i", "testsrc2=s=320x180:r=30",
+           "-f", "lavfi", "-t", "6", "-i", "smptebars=s=320x180:r=30",
+           "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]", "-map", "[v]",
+           "-c:v", "libx264", "-preset", "medium", "-bf", "3", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return path
+
+
+def test_skipping_frames_nothing_depends_on_measures_the_same(tmp_path: Path):
+    video = stream_like_video(tmp_path / "v.mp4")
+
+    fast = compute_visual_features(video, 12.0)
+    full = compute_visual_features(video, 12.0, fast_decode=False)
+
+    assert fast.cuts == full.cuts and len(fast.cuts) == 1
+    assert fast.motion.size == full.motion.size
+    assert float(np.corrcoef(fast.motion[1:], full.motion[1:])[0, 1]) > 0.99
+    assert float(np.abs(fast.brightness - full.brightness).max()) < 0.02
+
+
+def test_the_fast_decoding_is_what_runs_and_a_file_that_refuses_it_is_read_normally(tmp_path: Path, monkeypatch):  # noqa: ANN001
+    from app.analysis import visual
+
+    video = stream_like_video(tmp_path / "v.mp4")
+    real = visual.ffmpeg.iter_frames
+    asked: list[bool] = []
+
+    def refusing(path, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        asked.append(bool(kwargs.get("fast_decode")))
+        if kwargs.get("fast_decode"):
+            return iter(())                       # as if the decoder refused the options: no frames
+        return real(path, **kwargs)
+
+    monkeypatch.setattr(visual.ffmpeg, "iter_frames", refusing)
+
+    feats = compute_visual_features(video, 12.0)
+
+    assert asked == [True, False]
+    assert feats.motion.size == 24 and len(feats.cuts) == 1

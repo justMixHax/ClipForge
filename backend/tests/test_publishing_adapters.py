@@ -128,6 +128,9 @@ def test_youtube_upload_sends_the_whole_file_with_its_text_and_is_confirmed(yt: 
     assert outcome.status == "published" and outcome.url == "https://youtube.com/shorts/vids1"
     assert progress[-1] == pytest.approx(1.0) and state["upload_session"].endswith("/upload-session/s1")
     assert session["query"]["uploadType"] == "resumable"
+    first_put = platforms.calls("PUT", "/upload-session/")[0]
+    size = path.stat().st_size
+    assert first_put.headers["content-range"] == f"bytes 0-{size - 1}/{size}"
 
 
 def test_a_scheduled_youtube_post_is_uploaded_private_with_its_publish_time(yt: YouTube, platforms: FakePlatforms,  # noqa: F811

@@ -125,6 +125,44 @@ def _centre(box: tuple[float, float, float, float]) -> tuple[float, float]:
     return box[0] + box[2] / 2, box[1] + box[3] / 2
 
 
+CAM_MARGIN = 0.02        # share of the width kept between the gameplay crop and the stream's own facecam
+CENTRE_KEEP = 0.2        # the middle of the screen stays at least this far inside the gameplay crop
+MAX_GAMEPLAY_ZOOM = 1.5  # the most the gameplay may be enlarged to leave the facecam out
+
+
+def _overlap(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    return max(0.0, w) * max(0.0, h)
+
+
+def _gameplay_crop(src_w: int, src_h: int, ratio: float, cam: tuple[float, ...] | None) -> tuple[Box, bool]:
+    """The gameplay under the camera, leaving out the stream's own facecam overlay where that costs little:
+    slid sideways away from it while the middle of the screen (where the crosshair or the character usually is)
+    stays well inside, or else cut off just above or below it if that enlarges the picture no more than 1.5x.
+    Otherwise centred, as before. Returns (crop, whether the facecam was left out)."""
+    whole = (0.0, 0.0, float(src_w), float(src_h))
+    centred = _aspect_crop(whole, ratio)
+    if not cam or _overlap(centred, cam) <= 0:
+        return centred, False
+    bx, by, bw, bh = cam
+    w = centred[2]
+    margin = CAM_MARGIN * src_w
+    x = bx + bw + margin if bx + bw / 2 < src_w / 2 else bx - margin - w
+    if 0 <= x <= src_w - w and x + CENTRE_KEEP * w <= src_w / 2 <= x + (1 - CENTRE_KEEP) * w:
+        slid = _aspect_crop(whole, ratio, cx=x + w / 2)
+        if _overlap(slid, cam) <= 0:
+            return slid, True
+    gap = margin * src_h / src_w
+    region = (0.0, 0.0, float(src_w), by - gap) if by + bh / 2 > src_h / 2 \
+        else (0.0, by + bh + gap, float(src_w), src_h - by - bh - gap)
+    if region[3] >= 64:
+        cut = _aspect_crop(region, ratio)
+        if cut[2] >= w / MAX_GAMEPLAY_ZOOM and _overlap(cut, cam) <= 0:
+            return cut, True
+    return centred, False
+
+
 def default_facecam_box(face: tuple[float, float, float, float], src_w: int, src_h: int) -> tuple[float, ...]:
     """Typical webcam framing around a face, used when the overlay's border cannot be found."""
     fx, fy, fw, fh = face
@@ -211,7 +249,13 @@ def plan_layout(src_w: int, src_h: int, aspect: str, layout: str, faces: FaceSum
         bot_h = out_h - top_h
         face_cx = _centre(faces.face)[0] if (faces.face and not facecam_box) else None
         plan.top = {"crop": _aspect_crop((bx, by, bw, bh), out_w / top_h, face_cx), "height": top_h}
-        plan.bottom = {"crop": _aspect_crop(gameplay_box or whole, out_w / bot_h), "height": bot_h}
+        if gameplay_box:
+            bottom = _aspect_crop(gameplay_box, out_w / bot_h)
+        else:
+            bottom, left_out = _gameplay_crop(src_w, src_h, out_w / bot_h, cam_box)
+            if left_out:
+                plan.reason += " The gameplay below is framed to leave out the stream's own facecam."
+        plan.bottom = {"crop": bottom, "height": bot_h}
         plan.caption_y = _clamp((top_h + 0.58 * bot_h) / out_h, SAFE_TOP, SAFE_BOTTOM)
         plan.hook_y = _clamp(top_h / out_h, 0.05, 0.60)
 

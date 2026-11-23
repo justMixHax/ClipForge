@@ -69,6 +69,44 @@ def test_failures_are_explained(printed: str, says: str):
     assert says in (failed.value.message + " " + failed.value.hint).lower()
 
 
+BANNER = ("OpenAI Codex v0.167.0\n--------\nworkdir: C:\\tmp\nmodel: gpt-6.2-astra\nprovider: openai\n--------\n"
+          "user\nReply with exactly: OK\n")
+REFRESH_401 = ("2026-11-23T05:57:04.796464Z ERROR codex_models_manager::manager: failed to refresh available models: "
+               "unexpected status 401 Unauthorized: Your authentication token has expired.\n")
+NOT_OFFERED = "ERROR: The 'gpt-6.2-astra' model is not supported when using Codex with a ChatGPT account.\n"
+
+
+def test_a_model_the_chatgpt_plan_does_not_offer_is_named_as_the_reason(tmp_path, monkeypatch):  # noqa: ANN001
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    (tmp_path / "models_cache.json").write_text(json.dumps({"models": [
+        {"slug": "gpt-reserve", "visibility": "hide"}, {"slug": "gpt-6-luna", "visibility": "list"},
+        {"slug": "gpt-5.6-terra", "visibility": "list"}]}), encoding="utf-8")
+
+    with pytest.raises(ChatGPTUnavailable) as failed:   # an earlier token-refresh warning is not the reason
+        chatgpt_review.parse_answer(BANNER + REFRESH_401 + NOT_OFFERED)
+
+    assert "does not offer" in failed.value.message and "signed out" not in failed.value.message
+    assert "Settings" in failed.value.hint and "gpt-6-luna, gpt-5.6-terra" in failed.value.hint
+    assert "gpt-reserve" not in failed.value.hint
+
+
+def test_without_codexs_model_list_the_advice_still_stands(tmp_path, monkeypatch):  # noqa: ANN001
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))      # no models_cache.json there
+
+    with pytest.raises(ChatGPTUnavailable) as failed:
+        chatgpt_review.parse_answer(NOT_OFFERED)
+
+    assert "does not offer" in failed.value.message and "Settings" in failed.value.hint
+
+
+def test_an_unknown_failure_shows_codexs_own_error_not_its_banner():
+    with pytest.raises(ChatGPTUnavailable) as failed:
+        chatgpt_review.parse_answer(BANNER + "ERROR: stream disconnected before completion\n")
+
+    assert "unexpected" in failed.value.message
+    assert failed.value.hint == "ERROR: stream disconnected before completion"
+
+
 # -------------------------------------------------------------------------------------- what is sent
 def test_the_prompt_holds_the_transcript_and_the_numbered_picks():
     prompt = chatgpt_review.build_prompt(SENTENCES, claude_picks(), OPTIONS, title="Friday stream", creator="Kai")

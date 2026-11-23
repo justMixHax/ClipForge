@@ -264,3 +264,30 @@ def test_an_end_in_the_middle_of_a_word_waits_for_the_word_to_finish(video: Vide
     clip = max(clips_of(video), key=lambda c: c.id)
     assert typed_end < clip.end <= word.end + 0.1
     assert pipeline.cut_into_word(clip.start, clip.end, stored_words(video)) is None
+
+
+def test_a_short_selection_is_never_squeezed_below_a_second_by_the_word_rule():
+    from app.analysis.engine import HighlightOptions, moment_highlight
+    from app.transcription.sentences import Word, build_sentences
+
+    words = [Word("hello", 5.0, 5.5, 1.0), Word("world.", 7.0, 7.4, 1.0)]
+    options = HighlightOptions(count=1, min_len=8.0, max_len=30.0)
+
+    # the start falls inside "hello"; the end is in the pause: the shortest selection the app accepts
+    highlight = moment_highlight(words, build_sentences(words), None, None, options, start=5.4, end=6.4,
+                                 duration=10.0)
+
+    assert highlight.end - highlight.start >= 1.0 - 1e-6
+
+
+def test_the_word_rule_never_puts_the_start_past_the_end():
+    from app.analysis.engine import HighlightOptions, moment_highlight
+    from app.transcription.sentences import Word, build_sentences
+
+    words = [Word("one", 0.0, 0.4, 1.0), Word("two.", 1.0, 1.4, 1.0), Word("loooong", 9.0, 9.9, 1.0)]
+    options = HighlightOptions(count=1, min_len=8.0, max_len=30.0)
+
+    highlight = moment_highlight(words, build_sentences(words), None, None, options, start=9.7, end=None,
+                                 duration=10.0)
+
+    assert highlight.end > highlight.start and highlight.start <= 9.7

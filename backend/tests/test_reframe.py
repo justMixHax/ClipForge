@@ -229,3 +229,56 @@ def test_the_facecam_border_is_found_from_edges_that_never_move():
 
     assert x == pytest.approx(30, abs=4) and y == pytest.approx(40, abs=4)
     assert x + w == pytest.approx(210, abs=4) and y + h == pytest.approx(160, abs=4)
+
+
+# ------------------------------------------------------- the stream's own facecam inside the gameplay
+def overlap(a, b) -> float:  # noqa: ANN001
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    return max(0.0, w) * max(0.0, h)
+
+
+def stream(cam_box: tuple[float, float, float, float]) -> FaceSummary:
+    """A stream with its camera overlaid on the gameplay, the face inside that overlay."""
+    bx, by, bw, bh = cam_box
+    face = (bx + bw * 0.35, by + bh * 0.25, bw * 0.3, bh * 0.4)
+    return FaceSummary(mode="facecam", face=face, facecam_box=cam_box, frames=10, frames_with_face=10)
+
+
+@pytest.mark.parametrize("cam_box", [(0, 700, 560, 380), (1360, 700, 560, 380), (0, 0, 520, 380), (1400, 0, 520, 380)])
+def test_the_gameplay_below_does_not_show_the_facecam_a_second_time(cam_box):  # noqa: ANN001
+    plan = plan_layout(W, H, "9:16", "facecam_top", stream(cam_box))
+
+    x, y, w, h = bottom = plan.bottom["crop"]
+    assert overlap(bottom, cam_box) == 0
+    assert x + 0.2 * w <= W / 2 <= x + 0.8 * w          # the middle of the screen (crosshair, character) stays in view
+    assert "facecam" in plan.reason
+
+
+def test_a_facecam_too_wide_to_slide_past_is_cropped_above_when_that_zooms_in_only_a_little():
+    cam_box = (0, 760, 900, 320)
+
+    plan = plan_layout(W, H, "9:16", "facecam_top", stream(cam_box))
+
+    x, y, w, h = bottom = plan.bottom["crop"]
+    assert overlap(bottom, cam_box) == 0 and y + h <= 760
+    centred_width = plan_layout(W, H, "9:16", "facecam_top", stream(cam_box), gameplay_box=(0, 0, W, H)).bottom["crop"][2]
+    assert w >= centred_width / 1.5
+
+
+def test_when_nothing_leaves_the_facecam_out_without_losing_too_much_the_gameplay_stays_centred():
+    cam_box = (0, 400, 900, 680)
+
+    plan = plan_layout(W, H, "9:16", "facecam_top", stream(cam_box))
+
+    assert plan.bottom["crop"] == plan_layout(W, H, "9:16", "facecam_top", stream(cam_box),
+                                              gameplay_box=(0, 0, W, H)).bottom["crop"]
+
+
+def test_a_gameplay_box_you_set_is_used_even_if_it_holds_the_facecam():
+    cam_box = (0, 700, 560, 380)
+
+    plan = plan_layout(W, H, "9:16", "facecam_top", stream(cam_box), gameplay_box=(0, 0, 1200, 1080))
+
+    x, y, w, h = plan.bottom["crop"]
+    assert x + w <= 1200 and x < 560                   # inside your box, not moved away from the camera

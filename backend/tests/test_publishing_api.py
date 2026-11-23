@@ -306,3 +306,21 @@ def test_with_local_rules_only_nothing_is_sent_to_claude(client: TestClient, cli
     response = client.post("/api/publishing/suggest", json={"clip_id": clip_id, "platform": "tiktok"})
 
     assert response.status_code == 400 and "Settings" in response.json()["error"]
+
+
+def test_a_date_range_lists_posts_by_when_they_go_live(client: TestClient, clip_id: int):
+    account_id = tiktok_account()
+    now = datetime.now(timezone.utc)
+    with db.session_scope() as s:
+        early = Post(clip_id=clip_id, account_id=account_id, platform="tiktok", status="published",
+                     created_at=now - timedelta(days=2), published_at=now - timedelta(minutes=5))
+        later = Post(clip_id=clip_id, account_id=account_id, platform="tiktok", status="scheduled",
+                     created_at=now - timedelta(minutes=5), scheduled_at=now + timedelta(days=3))
+        s.add_all([early, later])
+        s.flush()
+        early_id, later_id = early.id, later.id
+    window = {"start": (now - timedelta(hours=1)).isoformat(), "end": (now + timedelta(hours=1)).isoformat()}
+
+    listed = [p["id"] for p in client.get("/api/publishing/posts", params=window).json()]
+
+    assert listed == [early_id] and later_id not in listed

@@ -405,6 +405,7 @@ def apply_second_opinion(picks: list[Highlight], review: Any, words: list[Word],
 
 # ------------------------------------------------------------------------------------------ your own moments
 WORD_EDGE = 0.6  # the most ClipForge moves your start or end, to keep a word whole
+MIN_MOMENT = 1.0  # the shortest clip a moment may become after that
 
 
 def _word_at(t: float, words: Sequence[Word]) -> Word | None:
@@ -456,10 +457,6 @@ def moment_highlight(words: list[Word], sentences: list[Sentence], audio: AudioF
                                           game_style=options.game_style, language=options.language,
                                           pre_roll=options.pre_roll, post_roll=options.post_roll), duration)
     moved: dict[str, dict[str, Any]] = {}
-    chopped = _word_at(start, words)
-    if chopped is not None and chopped.end - start <= WORD_EDGE:  # typed times are whole seconds: keep words whole
-        moved["start"] = {"by": round(chopped.end + 0.02 - start, 2), "word": chopped.text}
-        start = chopped.end + 0.02
     end_from = "you"
     if end is None and pick is not None and options.min_len <= pick.end - start <= options.max_len \
             and pick.end <= duration + 0.05:
@@ -474,6 +471,11 @@ def moment_highlight(words: list[Word], sentences: list[Sentence], audio: AudioF
         moved["end"] = {"by": round(finish - end, 2), "word": chopped.text}
         end = finish
     end = round(min(duration, end), 3)
+    chopped = _word_at(start, words)
+    if chopped is not None and chopped.end - start <= WORD_EDGE and end - (chopped.end + 0.02) >= MIN_MOMENT:
+        # typed times are whole seconds: keep the first word whole, unless that would leave too little clip
+        moved["start"] = {"by": round(chopped.end + 0.02 - start, 2), "word": chopped.text}
+        start = chopped.end + 0.02
 
     inside = _covering(sentences, start, end)
     full = ctx.score(inside[0], inside[-1], explain=True) if (ctx is not None and inside) else None

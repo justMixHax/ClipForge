@@ -4,14 +4,15 @@
 
 .DESCRIPTION
   By default it reviews the changes that are not committed yet. With -Base it reviews the current branch
-  against another branch instead. The review uses your own ChatGPT sign-in, never an API key, and is saved
+  against another branch instead, and with -Commit the changes one commit made. The review uses your own ChatGPT sign-in, never an API key, and is saved
   in the reviews folder with the date, so it stays next to the change in Git.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\review.ps1
   powershell -ExecutionPolicy Bypass -File scripts\review.ps1 -Base main
+  powershell -ExecutionPolicy Bypass -File scripts\review.ps1 -Commit 010cba1
 #>
-param([string]$Base = "", [string]$Model = "gpt-6.2-astra")
+param([string]$Base = "", [string]$Commit = "", [string]$Model = "gpt-6.2-astra")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "common.ps1")
 
@@ -57,7 +58,10 @@ try {
     $file = Join-Path $reviews ("{0}-codex-review.md" -f (Get-Date -Format "yyyy-MM-dd-HHmm"))
     $diagnostics = Join-Path $env:TEMP ("clipforge-review-{0}.log" -f $PID)
     $arguments = @("review", "-c", "model_provider=`"openai`"", "-c", "web_search=`"disabled`"", "-c", "model=`"$Model`"", "-c", "model_reasoning_effort=`"high`"")
-    if ($Base) { $arguments += @("--base", $Base); $what = "this branch against $Base" } else { $arguments += "--uncommitted"; $what = "the changes not committed yet" }
+    if ($Commit) {
+        if ($Commit -notmatch '^[0-9a-fA-F]{7,40}$') { Write-Miss "-Commit takes a commit id (7 to 40 hexadecimal characters)."; exit 1 }
+        $arguments += @("--commit", $Commit); $what = "commit $Commit"
+    } elseif ($Base) { $arguments += @("--base", $Base); $what = "this branch against $Base" } else { $arguments += "--uncommitted"; $what = "the changes not committed yet" }
 
     Write-Step "ChatGPT ($Model) is reviewing $what. This can take a few minutes."
     Push-Location $ProjectRoot

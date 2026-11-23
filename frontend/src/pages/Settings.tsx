@@ -168,6 +168,23 @@ function ConnectionTest() {
   );
 }
 
+/** The ChatGPT model, with the models your ChatGPT plan offers right now as suggestions. */
+function ChatGPTModelField({ value, disabled, onSave }: { value: string; disabled: boolean; onSave: (model: string) => void }) {
+  const offered = useQuery({ queryKey: ["chatgpt-models"], queryFn: () => api.get<{ offered: string[] }>("/system/ai/chatgpt-models"), staleTime: 60_000 });
+  const models = offered.data?.offered ?? [];
+  const missing = models.length > 0 && !models.includes(value);
+  const hint = models.length === 0 ? "As named in the ChatGPT app, e.g. gpt-6.2-astra."
+    : missing ? `Your ChatGPT plan does not offer ${value} right now. It offers: ${models.join(", ")}.`
+      : `Your ChatGPT plan offers: ${models.join(", ")}.`;
+  return (
+    <Field label="ChatGPT model" hint={hint}>
+      <Input defaultValue={value} key={value} list="chatgpt-models" disabled={disabled} spellCheck={false} className={missing ? "border-warn/60" : undefined}
+        onBlur={(event) => event.target.value.trim() && event.target.value.trim() !== value && onSave(event.target.value.trim())} />
+      <datalist id="chatgpt-models">{models.map((model) => <option key={model} value={model} />)}</datalist>
+    </Field>
+  );
+}
+
 export default function SettingsPage() {
   const settings = useSettings();
   const options = useOptions();
@@ -250,10 +267,8 @@ export default function SettingsPage() {
                   <option value="chatgpt">ChatGPT (recommended)</option><option value="off">Off</option>
                 </Select>
               </Field>
-              <Field label="ChatGPT model" hint="As named in the ChatGPT app, e.g. gpt-6.2-astra.">
-                <Input defaultValue={String(v("ai.chatgpt_model"))} disabled={v("ai.second_opinion") !== "chatgpt"} spellCheck={false}
-                  onBlur={(event) => event.target.value.trim() && event.target.value.trim() !== v("ai.chatgpt_model") && save({ "ai.chatgpt_model": event.target.value.trim() })} />
-              </Field>
+              <ChatGPTModelField value={String(v("ai.chatgpt_model"))} disabled={v("ai.second_opinion") !== "chatgpt"}
+                onSave={(model) => save({ "ai.chatgpt_model": model })} />
               <div className="sm:col-span-2"><ConnectionTest /></div>
               <Field label="Video encoder">
                 <Select value={String(v("processing.video_encoder"))} onChange={(event) => save({ "processing.video_encoder": event.target.value })}>

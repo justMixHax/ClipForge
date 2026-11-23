@@ -165,7 +165,10 @@ def _handler(fake: FakePlatforms):  # noqa: C901  (one small fake per platform, 
                     return self._send(fake.youtube_put_status, {"error": {"code": fake.youtube_put_status,
                                                                           "message": "Backend Error",
                                                                           "errors": [{"reason": "backendError"}]}})
-                start = int(content_range.split(" ")[1].split("-")[0]) if content_range.startswith("bytes ") and "*" not in content_range else 0
+                if not content_range.startswith("bytes ") or "*" in content_range:
+                    self.rfile.read(length)
+                    return self._send(400, {"error": {"message": "Content-Range is missing"}})
+                start = int(content_range.split(" ")[1].split("-")[0])
                 if start != len(session["data"]):
                     self.rfile.read(length)
                     return self._send(400, {"error": {"message": f"wrong offset {start}"}})

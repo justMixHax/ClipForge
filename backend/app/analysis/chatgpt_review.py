@@ -193,17 +193,41 @@ Transcript, one line per sentence, with its start time:
 
 
 # ----------------------------------------------------------------------------------------- the answer
+def offered_models() -> list[str]:
+    """The models Codex last saw offered to this ChatGPT sign-in, best first (from Codex's own cache file).
+    Empty when that is not known."""
+    home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+    try:
+        data = json.loads((home / "models_cache.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    models = data.get("models") if isinstance(data, dict) else None
+    return [str(m["slug"]) for m in models if isinstance(m, dict) and m.get("visibility") == "list"
+            and valid_model(str(m.get("slug") or ""))][:8] if isinstance(models, list) else []
+
+
 def _explain(text: str) -> ChatGPTUnavailable:
-    low = text.lower()
+    """Why Codex gave no usable answer. Codex's own final error line decides: its log can also hold passing
+    warnings (a token refreshed on the way, for example) that are not the reason."""
+    errors = [line.strip() for line in text.splitlines() if line.strip().lower().startswith("error")]
+    said = errors[-1] if errors else text.strip()
+    low = said.lower()
+    if "not supported when using codex with a chatgpt account" in low or ("model" in low and "not supported" in low):
+        offered = offered_models()
+        return ChatGPTUnavailable(
+            "Your ChatGPT plan does not offer the ChatGPT model chosen in Settings right now, so there is no second "
+            "opinion this time.",
+            hint="Choose another ChatGPT model in Settings" + (f" (your plan offers: {', '.join(offered)})"
+                                                                if offered else "") + ", or check your ChatGPT plan.")
     if any(k in low for k in ("401", "unauthorized", "not logged in", "log in", "login", "authentication",
-                              "sign in")):
+                              "sign in", "token has expired", "token_expired")):
         return ChatGPTUnavailable("ChatGPT is signed out on this PC, so there is no second opinion this time.",
                                   hint=SIGN_IN_HINT)
     if any(k in low for k in ("usage limit", "rate limit", "limit reached", "429", "quota")):
         return ChatGPTUnavailable("Your ChatGPT plan's limit is reached, so there is no second opinion this time.",
                                   hint="Analyse again after the limit resets.")
     return ChatGPTUnavailable("ChatGPT gave an unexpected answer, so there is no second opinion this time.",
-                              hint=text[:300])
+                              hint=said[:300])
 
 
 def _number(value: Any) -> float | None:

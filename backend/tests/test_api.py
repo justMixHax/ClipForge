@@ -469,3 +469,16 @@ def test_the_finished_list_leaves_out_jobs_that_are_still_waiting(client: TestCl
 def test_the_chatgpt_model_setting_refuses_odd_characters(client: TestClient):
     assert client.put("/api/settings", json={"values": {"ai.chatgpt_model": "gpt & calc"}}).status_code == 400
     assert client.put("/api/settings", json={"values": {"ai.chatgpt_model": "gpt-6.2-astra"}}).status_code == 200
+
+
+def test_settings_can_list_the_chatgpt_models_your_plan_offers(client: TestClient, tmp_path: Path, monkeypatch):  # noqa: ANN001
+    import json
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    assert client.get("/api/system/ai/chatgpt-models").json() == {"offered": []}   # not known yet
+
+    (tmp_path / "models_cache.json").write_text(json.dumps({"models": [
+        {"slug": "gpt-6-luna", "visibility": "list"}, {"slug": "gpt-reserve", "visibility": "hide"},
+        {"slug": "gpt-5.6-terra", "visibility": "list"}]}), encoding="utf-8")
+
+    assert client.get("/api/system/ai/chatgpt-models").json() == {"offered": ["gpt-6-luna", "gpt-5.6-terra"]}

@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 22 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
+Status as of 23 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
 marked done because the code merely exists.
 
 | Mark | Meaning |
@@ -95,11 +95,11 @@ need publishing or analytics show a dash.
 
 | Deliverable | | Notes |
 |---|---|---|
-| Performance | ✅ | Graphics-card encoding and speech-to-text, cached intermediates, one decode per render |
+| Performance | ✅ | Graphics-card encoding and speech-to-text, cached intermediates, one decode per render; measuring the picture skips frames nothing depends on (a 2-hour 1080p60 stream: 121 s instead of about 220 s) |
 | Error handling | ✅ | Every failure path tested shows a message that says what to do |
 | Responsive interface | ✅ | Desktop and phone width |
 | Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Not reviewed by anyone else |
-| Testing | ✅ | 784 automated tests |
+| Testing | ✅ | 800 automated tests |
 | Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder |
 | Documentation | ✅ | |
 
@@ -114,7 +114,9 @@ need publishing or analytics show a dash.
 2. ~~Suggest moments from stretches with no speech.~~ **Done on 21 November 2026.** Where almost nothing is
    said, loud and busy moments now fill the places the spoken moments left free. On that film it found the
    three action scenes (scores 55 to 56, low confidence). It still needs trying on real gameplay.
-3. **Check the framing on real footage**, especially facecam detection, and fix what it gets wrong.
+3. ~~Check the framing on real footage.~~ **Checked on 23 November 2026** on four real streams: the camera
+   panel was right; under it, three showed the stream's own facecam a second time. Fixed: the gameplay is slid
+   away from it, or cut just above it, when that costs little. Next there: crops that follow a moving subject.
 4. ~~Verify speech-to-text on the graphics card.~~ **Done on 22 November 2026.** Next there: try a larger speech
    model, which the graphics card makes practical (`large-v3-turbo`, a 1.6 GB download from Settings).
 5. ~~Add an AI review of the candidates.~~ **Done on 22 November 2026, with Claude as the main engine**

@@ -216,9 +216,8 @@ class YouTube:
                     sent[0] += n
                     on_progress(min(1.0, sent[0] / size))
 
-                headers = {**self._auth(tokens), "Content-Type": "video/mp4", "Content-Length": str(size - offset)}
-                if offset:
-                    headers["Content-Range"] = f"bytes {offset}-{size - 1}/{size}"
+                headers = {**self._auth(tokens), "Content-Type": "video/mp4", "Content-Length": str(size - offset),
+                           "Content-Range": f"bytes {offset}-{size - 1}/{size}"}
                 response = self.http.request("PUT", session, expect=(200, 201), headers=headers,
                                              content=file_part(draft.file, offset, size, progress, should_cancel))
                 return self._video(response)
