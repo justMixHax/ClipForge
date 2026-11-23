@@ -25,6 +25,7 @@ from .. import db
 from ..analysis.audio import AudioFeatures, compute_audio_features
 from ..analysis.dedupe import ExistingClip
 from ..analysis import chatgpt_review, claude_review
+from ..analysis.describe import cover_words, credit_line, post_caption
 from ..analysis.engine import (HighlightOptions, apply_second_opinion, find_highlights, highlights_from_picks,
                                moment_highlight)
 from ..analysis.feedback import FeedbackProfile
@@ -37,6 +38,7 @@ from ..editing.captions import (CaptionWord, build_ass, build_srt, build_vtt, ma
 from ..editing.qc import run_checks, summarize
 from ..editing.reframe import ASPECTS, LAYOUTS, FaceSummary, analyze_faces, plan_layout
 from ..editing.render import RenderRequest, render_clip
+from ..editing.thumbnail import can_draw, make_cover
 from ..errors import ClipForgeError, DependencyMissing, JobCancelled, NotFound
 from ..models import Clip, Feedback, Job, Notification, Project, TranscriptSegment, Video
 from ..security.paths import safe_filename
@@ -61,7 +63,8 @@ STAGES: dict[str, list[tuple[str, str, int]]] = {
                 ("second", "ChatGPT is checking the picks", 10),
                 ("save", "Saving suggestions", 2)],
     "render": [("framing", "Framing the shot", 8), ("captions", "Building captions", 3),
-               ("encode", "Rendering video", 77), ("checks", "Checking the export", 12)],
+               ("encode", "Rendering video", 75), ("checks", "Checking the export", 10),
+               ("cover", "Making the thumbnail", 4)],
     "import": [("inspect", "Checking the link", 4), ("download", "Downloading the video", 88),
                ("register", "Adding it to your library", 8)],
     "moment": [("audio", "Extracting audio", 3), ("transcribe", "Transcribing speech", 62),
@@ -302,11 +305,12 @@ def store_transcript(session: Session, video_id: int, words: list[Word]) -> int:
 
 
 def clip_segments(start: float, end: float, words: list[Word], remove_silence: bool, min_gap: float = 0.8,
-                  keep: float = 0.12) -> list[tuple[float, float]]:
+                  keep: float = 0.12, cuts: Sequence[Sequence[float]] | None = None) -> list[tuple[float, float]]:
     """The source ranges a clip is made of. With silence removal, pauses longer than min_gap are cut down
-    to a short breath (keep on each side), so the clip tightens without words colliding."""
+    to a short breath (keep on each side), so the clip tightens without words colliding. Parts you left out
+    (cuts: [from, to] in seconds of the source video) are taken out last."""
     if not remove_silence:
-        return [(round(start, 3), round(end, 3))]
+        return leave_out([(round(start, 3), round(end, 3))], cuts)
     inside = [w for w in words if w.end > start and w.start < end]
     segments: list[tuple[float, float]] = []
     cursor = start
@@ -317,7 +321,29 @@ def clip_segments(start: float, end: float, words: list[Word], remove_silence: b
                 segments.append((cursor, cut_from))
                 cursor = cut_to
     segments.append((cursor, end))
-    return [(round(a, 3), round(b, 3)) for a, b in segments if b - a >= 0.1]
+    return leave_out([(round(a, 3), round(b, 3)) for a, b in segments if b - a >= 0.1], cuts)
+
+
+def leave_out(segments: list[tuple[float, float]], cuts: Sequence[Sequence[float]] | None
+              ) -> list[tuple[float, float]]:
+    """The segments without the parts left out. Parts that would leave nothing are ignored: a clip is never
+    rendered empty."""
+    if not cuts:
+        return segments
+    pieces = list(segments)
+    for c, d in sorted((float(c), float(d)) for c, d in cuts):
+        kept: list[tuple[float, float]] = []
+        for a, b in pieces:
+            if d <= a or c >= b:
+                kept.append((a, b))
+                continue
+            if c > a:
+                kept.append((a, c))
+            if d < b:
+                kept.append((d, b))
+        pieces = kept
+    pieces = [(round(a, 3), round(b, 3)) for a, b in pieces if b - a >= 0.1]
+    return pieces or segments
 
 
 def cut_into_word(start: float, end: float, words: list[Word]) -> tuple[str, str] | None:
@@ -342,11 +368,16 @@ def build_post_kit(clip: Clip, video: Video) -> str:
     permission = {"owned": "Your own content", "licensed": "Licensed (campaign or agreement)",
                   "permission": "Creator gave permission", "denied": "NOT PERMITTED",
                   "unknown": "Not recorded: check before posting"}.get(video.permission_status, video.permission_status)
-    credit = video.attribution or (f"Clip from {video.creator_name}" if video.creator_name else "")
+    credit = credit_line(video.attribution, video.creator_name)
     tags = " ".join(clip.hashtags or [])
+    words = clip.cover_text or cover_words(clip.title)[0]
+    thumbnail = (["THUMBNAIL", f"The .jpg next to this file, with the words “{words}” on it. Use it as the cover "
+                               "where the app lets you upload one.", ""] if clip.cover_path else [])
     lines = [clip.title, "=" * max(8, len(clip.title)), "", "TITLE", clip.title, "", "ON-SCREEN HOOK", clip.hook_text,
              "", "DESCRIPTION", clip.description or clip.title, "", "HASHTAGS", tags, "",
-             "COPY-PASTE", f"{clip.title}\n{credit}\n\n{tags}".replace("\n\n\n", "\n\n"), "",
+             "TIKTOK CAPTION (copy and paste)",
+             clip.tiktok_caption or post_caption(clip.description or clip.title, credit, clip.hashtags or []),
+             "", *thumbnail,
              "SOURCE", f"Video: {video.title}", f"Creator: {video.creator_name or 'not recorded'}",
              f"Link: {link or 'local file'}", f"Time in source: {_clock(clip.start)} to {_clock(clip.end)}",
              f"Rights: {permission}" + (f" ({video.permission_note})" if video.permission_note else ""),
@@ -605,7 +636,8 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                         hashtags=h.hashtags, category=h.category, transcript_text=h.transcript_text, start=h.start,
                         end=h.end, score=h.score, subscores=h.subscores, confidence=h.confidence,
                         explanation=h.explanation, evidence=h.evidence, analysis_source=h.analysis_source,
-                        rank=h.rank, settings=settings)
+                        rank=h.rank, settings=settings, cover_text=h.extra.get("cover_text", ""),
+                        cover_word=h.extra.get("cover_word", ""))
             s.add(clip)
             new_clips.append(clip)
         s.flush()
@@ -766,7 +798,8 @@ def _moment(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                     transcript_text=highlight.transcript_text, start=highlight.start, end=highlight.end,
                     score=highlight.score, subscores=highlight.subscores, confidence=highlight.confidence,
                     explanation=highlight.explanation, evidence=highlight.evidence, analysis_source="manual", rank=0,
-                    settings=settings)
+                    settings=settings, cover_text=highlight.extra.get("cover_text", ""),
+                    cover_word=highlight.extra.get("cover_word", ""))
         s.add(clip)
         s.flush()
         enqueue_render(s, clip, priority=8)
@@ -804,7 +837,7 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     aspect = st.get("aspect") if st.get("aspect") in ASPECTS else "9:16"
     layout = st.get("layout") if st.get("layout") in LAYOUTS else "auto"
     segments = clip_segments(clip.start, clip.end, words, bool(st.get("remove_silence")),
-                             min_gap=float(st.get("silence_threshold", 0.8)))
+                             min_gap=float(st.get("silence_threshold", 0.8)), cuts=st.get("cuts"))
     total = sum(b - a for a, b in segments)
 
     ctx.start("framing")
@@ -826,11 +859,14 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         caption_words = words_for_clip(words, segments)
         mark_emphasis(caption_words)
     ass_text, report = None, {}
-    if captions_cfg.get("enabled", True) and (caption_words or (hook_cfg.get("enabled") and clip.hook_text)):
+    # Subtitles and the hook title have a switch each: subtitles off still leaves a hook title that is on.
+    shown_words = caption_words if captions_cfg.get("enabled", True) else []
+    hook_on = bool(hook_cfg.get("enabled", True) and clip.hook_text)
+    if shown_words or hook_on:
         style = resolve_style({"censor": cfg["captions.censor"], **captions_cfg})
         ass_text, report = build_ass(
-            caption_words, style, plan.out_w, plan.out_h,
-            hook=clip.hook_text if hook_cfg.get("enabled", True) else None,
+            shown_words, style, plan.out_w, plan.out_h,
+            hook=clip.hook_text if hook_on else None,
             hook_seconds=float(hook_cfg.get("seconds", 4.0)), clip_seconds=total,
             position_y=captions_cfg.get("position", plan.caption_y) if "position" in captions_cfg else plan.caption_y,
             hook_y=plan.hook_y)
@@ -853,7 +889,7 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         log.warning("GPU encode failed, retrying on the CPU", extra={"clip_id": clip.id})
         request.encoder = "libx264"
         result = render_clip(request, on_progress=progress, should_cancel=ctx.cancelled)
-    os.replace(temp, final)
+    final = storage.place_file(temp, final)  # under its own name if the old video is open in the browser
 
     ctx.start("checks")
     checks = run_checks(final, expected_w=plan.out_w, expected_h=plan.out_h, expected_duration=total,
@@ -864,11 +900,29 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     (folder / "captions.vtt").write_text(build_vtt(caption_words), encoding="utf-8")
     if ass_text:
         (folder / "captions.ass").write_text(ass_text, encoding="utf-8")
+    else:
+        (folder / "captions.ass").unlink(missing_ok=True)  # nothing burned in: no script from an earlier render
     shutil.rmtree(folder / "work", ignore_errors=True)
+
+    ctx.start("cover")
+    words, coloured = (clip.cover_text, clip.cover_word) if clip.cover_text else cover_words(clip.title)
+    chosen = clip.cover_time if clip.cover_time is not None and any(
+        a - 0.01 <= clip.cover_time <= b + 0.01 for a, b in segments) else None  # never from a part left out
+    try:
+        picture, moment = make_cover(source, clip.start, clip.end, plan.as_dict(), (video.width, video.height),
+                                     words, coloured, folder, at=chosen, inside=segments,
+                                     should_cancel=ctx.cancelled)
+    except JobCancelled:
+        raise
+    except Exception:  # noqa: BLE001  (a thumbnail must never cost you the clip)
+        log.warning("The thumbnail could not be made", exc_info=True, extra={"clip_id": clip.id})
+        picture, moment = None, None
 
     with db.session_scope() as s:
         stored = s.get(Clip, clip.id)
         stored.render_status, stored.render_error = "ready", ""
+        if picture is not None:
+            stored.cover_path, stored.cover_time = storage.rel_path(picture), moment
         stored.file_path, stored.thumb_path = storage.rel_path(final), storage.rel_path(cover)
         stored.file_size = final.stat().st_size
         stored.out_width, stored.out_height, stored.out_duration = result.width, result.height, result.duration
@@ -885,10 +939,24 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             ready = s.query(Clip).filter(Clip.video_id == stored.video_id, Clip.render_status == "ready").count()
             notify(s, "render_done", f"{ready} clip{'s' if ready != 1 else ''} ready from “{video.title}”",
                    "Preview, approve and download them in the AI Clipper.", f"/clipper?video={stored.video_id}")
+    for old in folder.glob("clip*.mp4"):
+        if old not in (final, temp):
+            try:
+                storage.remove_file(old)  # an earlier render; one still open in the browser goes next time
+            except OSError:
+                pass
     passed = sum(1 for check in checks if check.get("status") == "pass")
     ctx.say("forge", f"Rendered “{clip.title}” ({result.duration:.0f} s, {plan.out_w}×{plan.out_h}) on the "
                      f"{'graphics card' if result.encoder == 'h264_nvenc' else 'processor'} in "
                      f"{result.seconds_taken:.0f} s; {passed} of {len(checks)} checks passed.")
+    if picture is not None and can_draw(words):
+        ctx.say("forge", f"Made the thumbnail “{words}” from the moment {moment - clip.start:.0f} s into the clip.")
+    elif picture is not None:
+        ctx.say("forge", f"Made the thumbnail from the moment {moment - clip.start:.0f} s into the clip, without "
+                         f"words: the fonts on this PC cannot draw “{words}”.")
+    else:
+        ctx.say("forge", "Could not make the thumbnail this time (the clip itself is fine); you can make it again "
+                         "from the clip.")
     return {"file": storage.rel_path(final), "seconds": result.seconds_taken, "qc": summarize(checks),
             "encoder": result.encoder}
 

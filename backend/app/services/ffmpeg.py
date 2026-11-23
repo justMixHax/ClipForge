@@ -235,8 +235,10 @@ def iter_frames(path: Path, *, fps: float, width: int, height: int, pix_fmt: str
         cmd += ["-ss", f"{max(0.0, start):.3f}"]
     if duration is not None:
         cmd += ["-t", f"{duration:.3f}"]
+    # round=up: each frame is the latest picture at or before its time. The default (nearest) hands over the one
+    # just before the next half interval, which at a few frames a minute is a second later than asked for.
     cmd += ["-i", str(path), "-an", "-sn", "-dn",
-            "-vf", f"fps={fps},scale={width}:{height}:flags=bilinear,format={pix_fmt}", "-f", "rawvideo", "-"]
+            "-vf", f"fps={fps}:round=up,scale={width}:{height}:flags=bilinear,format={pix_fmt}", "-f", "rawvideo", "-"]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NO_WINDOW,
                                 bufsize=frame_bytes * 4)

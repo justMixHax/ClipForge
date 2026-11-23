@@ -19,11 +19,12 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
+from .describe import clean_caption, clean_hashtags, clean_words
 from .scoring import CATEGORY_LABELS
 
 MODELS = ("sonnet", "opus", "haiku")
@@ -46,6 +47,10 @@ class Pick:
     category: str
     score: float
     reason: str
+    thumb: str = ""                                   # the words on its thumbnail, upper case
+    thumb_word: str = ""                              # the one of them shown in colour
+    caption: str = ""                                 # the TikTok caption, without hashtags
+    hashtags: list[str] = field(default_factory=list)
 
 
 def clock(seconds: float) -> str:
@@ -88,6 +93,17 @@ def command(cli: str, model: str) -> list[str]:
 
 
 # ------------------------------------------------------------------------------------------- the prompt
+POST_TEXT = """For every clip you give, also write what goes with it when it is posted:
+- "thumb": 2 to 6 words for its thumbnail, the picture people see before they tap: the most intriguing thing that
+  really happens or is said (a short quote, a number, a reaction). Never promise more than the clip shows.
+- "thumb_word": the one word of "thumb" to show in colour, the one that makes people curious.
+- "caption": the TikTok caption: one short line (at most 150 characters) that makes people want to watch to the
+  end, without hashtags and without giving the payoff away.
+- "hashtags": 3 to 5 hashtags that fit this clip (what happens, the game, the topic), most specific first."""
+POST_FIELDS = ('"thumb": "2 TO 6 WORDS", "thumb_word": "WORDS", "caption": "one line for TikTok", '
+               '"hashtags": ["#tag", "#tag"]')
+
+
 def build_prompt(sentences: Sequence[Sentence], options, *, title: str, creator: str, game: str,  # noqa: ANN001
                  action_times: Sequence[float], duration: float) -> str:
     lines = [f"[{clock(s.start)}] {s.text}" for s in sentences]
@@ -112,13 +128,15 @@ What makes a good clip:
 Moments where little is said but a lot happens are listed here as loud or busy: {action}. Use them only if the
 lines around them suggest something worth seeing.
 
-Rules: use only times from the transcript. Never invent words, quotes or events: titles and hooks must reflect
-what is really said. Score each pick 0-100 for how likely it is to work as a short, honestly; it is an
-estimate, not a promise. Category is one of: {', '.join(CATEGORY_LABELS)}.
+Rules: use only times from the transcript. Never invent words, quotes or events: titles, hooks, thumbnail words
+and captions must reflect what is really said and shown. Score each pick 0-100 for how likely it is to work as a
+short, honestly; it is an estimate, not a promise. Category is one of: {', '.join(CATEGORY_LABELS)}.
+
+{POST_TEXT}
 
 Answer with JSON only, in this shape:
 {{"picks": [{{"start": 251.0, "end": 301.5, "title": "short catchy title", "hook": "on-screen line, max 12 words",
-"category": "funny", "score": 85, "reason": "one sentence on why this works"}}]}}
+"category": "funny", "score": 85, "reason": "one sentence on why this works", {POST_FIELDS}}}]}}
 Times are in seconds from the start of the video.
 
 Transcript, one line per sentence, with its start time (h:mm:ss or m:ss):
@@ -154,12 +172,14 @@ Video: "{title}"{by}{playing}, {clock(duration)} long.
 Then name the clip: a short catchy title, an on-screen hook line, a category and an honest 0-100 score for how
 likely it is to work as a short (an estimate, not a promise), with one sentence on why.
 
-Rules: never invent words, quotes or events: the title and hook must reflect what is really said. Category is
-one of: {', '.join(CATEGORY_LABELS)}.
+Rules: never invent words, quotes or events: the title, hook, thumbnail words and caption must reflect what is
+really said and shown. Category is one of: {', '.join(CATEGORY_LABELS)}.
+
+{POST_TEXT}
 
 Answer with JSON only, in this shape:
 {{"picks": [{{"start": {start:.1f}, "end": {end_field}, "title": "short catchy title", "hook": "on-screen line, max 12 words",
-"category": "funny", "score": 80, "reason": "one sentence on why this works"}}]}}
+"category": "funny", "score": 80, "reason": "one sentence on why this works", {POST_FIELDS}}}]}}
 {end_note}
 
 Transcript around the moment, one line per sentence, with its start time (h:mm:ss or m:ss):
@@ -167,6 +187,15 @@ Transcript around the moment, one line per sentence, with its start time (h:mm:s
 
 
 # ----------------------------------------------------------------------------------------- the answer
+def post_text(item: dict) -> dict:
+    """The thumbnail words, the word in colour, the caption and the hashtags an AI wrote for a clip, cleaned:
+    hashtags it put in the caption join the others."""
+    thumb, thumb_word = clean_words(str(item.get("thumb") or ""), str(item.get("thumb_word") or ""))
+    caption, tagged = clean_caption(item.get("caption"))
+    return {"thumb": thumb, "thumb_word": thumb_word, "caption": caption,
+            "hashtags": clean_hashtags([*clean_hashtags(item.get("hashtags")), *tagged])}
+
+
 def _explain(text: str) -> ClaudeUnavailable:
     low = text.lower()
     if any(k in low for k in ("authenticate", "oauth", "not logged in", "log in", "login", "401")):
@@ -217,7 +246,7 @@ def parse_answer(printed: str) -> list[Pick]:
                           hook=str(item.get("hook") or "").strip()[:120],
                           category=category if category in CATEGORY_LABELS else "highlight",
                           score=round(min(100.0, max(0.0, score if score is not None else 60.0)), 1),
-                          reason=str(item.get("reason") or "").strip()[:400]))
+                          reason=str(item.get("reason") or "").strip()[:400], **post_text(item)))
     if not picks:
         raise ClaudeUnavailable("Claude returned no picks, so the local rules picked the clips this time.",
                                 hint=text[:300])

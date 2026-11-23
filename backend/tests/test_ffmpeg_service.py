@@ -98,6 +98,28 @@ def test_colour_frames_can_be_read_from_a_time_range(tiny_video: Path):
     assert frames[0].shape == (180, 320, 3)
 
 
+def blocks_video(path: Path, count: int = 16, seconds: float = 0.5) -> Path:
+    """A video of short blocks, each a different grey, so a frame's grey says when it was on screen."""
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
+    for i in range(count):
+        cmd += ["-f", "lavfi", "-t", str(seconds), "-i", f"color=c=0x{i * 16:02x}{i * 16:02x}{i * 16:02x}:s=64x36:r=30"]
+    cmd += ["-filter_complex", "".join(f"[{i}:v]" for i in range(count)) + f"concat=n={count}:v=1:a=0[v]",
+            "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return path
+
+
+def test_frame_k_shows_the_picture_at_the_start_plus_k_intervals_even_at_low_rates(tmp_path: Path):
+    video = blocks_video(tmp_path / "blocks.mp4")
+    every = [f.mean() for f in ffmpeg.iter_frames(video, fps=30, width=64, height=36)]  # every frame, in order
+    grey_of_block = [sum(every[b * 15:(b + 1) * 15]) / 15 for b in range(16)]
+
+    sampled = list(ffmpeg.iter_frames(video, fps=0.5, width=64, height=36, start=0.2, duration=7.5))
+
+    shown = [min(range(16), key=lambda b: abs(grey_of_block[b] - frame.mean())) for frame in sampled]
+    assert shown == [int((0.2 + k / 0.5) / 0.5) for k in range(len(sampled))] and len(sampled) >= 3
+
+
 def test_extract_audio_writes_16k_mono_wav(tiny_video: Path, tmp_path: Path):
     import wave
 

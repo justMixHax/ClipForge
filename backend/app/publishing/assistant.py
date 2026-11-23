@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..analysis import claude_review
+from ..analysis.describe import credit_line, merge_hashtags, post_caption, tidy_caption
 from ..errors import ClipForgeError, DependencyMissing, NotFound
 from ..models import Clip, Video
 from ..services import settings_store
@@ -26,8 +27,18 @@ WHAT = {
 }
 
 
-def build_prompt(clip: Clip, video: Video | None, platform: str) -> str:
+def build_prompt(clip: Clip, video: Video | None, platform: str, *, emojis: bool | None = None,
+                 avoid: str = "") -> str:
+    """The request to Claude. emojis: whether the caption should have some (None: not said). avoid: a caption to
+    write a different one from."""
     kind, shape = WHAT[platform]
+    style = ""
+    if emojis is True:
+        style += "\nUse one to three emojis in the caption that fit what happens."
+    elif emojis is False:
+        style += "\nNo emojis."
+    if avoid:
+        style += f'\nWrite a new caption, clearly different from this one: "{" ".join(avoid.split())[:400]}"'
     creator = video.creator_name if video is not None else ""
     credit = (video.attribution if video is not None and video.attribution else
               (f"Clip from {creator}" if creator else ""))
@@ -45,7 +56,7 @@ Credit line to keep, word for word: "{credit or 'none'}"
 Transcript of the clip:
 {(clip.transcript_text or "(nothing is said in this clip)")[:4000]}
 
-Write: {shape} hashtags: three to six relevant hashtags, lowercase, without spaces.
+Write: {shape} hashtags: three to six relevant hashtags, lowercase, without spaces.{style}
 
 Answer with JSON only: {{"title": "...", "caption": "...", "hashtags": ["#..."]}}"""
 
@@ -73,8 +84,7 @@ def parse(printed: str) -> dict[str, Any]:
     return {"title": title, "caption": caption, "hashtags": hashtags}
 
 
-def suggest(session: Session, clip_id: int, platform: str) -> dict[str, Any]:
-    store.check_platform(platform)
+def _clip_for_claude(session: Session, clip_id: int) -> tuple[Clip, dict[str, Any]]:
     clip = session.get(Clip, clip_id)
     if clip is None:
         raise NotFound("That clip does not exist.")
@@ -82,9 +92,37 @@ def suggest(session: Session, clip_id: int, platform: str) -> dict[str, Any]:
     if cfg["ai.engine"] != "claude":
         raise ClipForgeError("Claude is switched off in Settings (local rules only), so nothing is sent to it.",
                              hint="Switch the AI engine to Claude in Settings to get suggestions.")
-    prompt = build_prompt(clip, session.get(Video, clip.video_id), platform)
+    return clip, cfg
+
+
+def _ask(prompt: str, cfg: dict[str, Any]) -> dict[str, Any]:
     try:
         printed = claude_review.run_claude(prompt, model=str(cfg["ai.claude_model"]), timeout=180)
     except claude_review.ClaudeUnavailable as exc:
         raise DependencyMissing(exc.message.split(",")[0].rstrip(".") + ".", hint=exc.hint) from exc
     return parse(printed)
+
+
+def suggest(session: Session, clip_id: int, platform: str) -> dict[str, Any]:
+    store.check_platform(platform)
+    clip, cfg = _clip_for_claude(session, clip_id)
+    return _ask(build_prompt(clip, session.get(Video, clip.video_id), platform), cfg)
+
+
+def tiktok_caption(session: Session, clip_id: int, *, emojis: bool = True, hashtags: bool = True) -> str:
+    """A new TikTok caption by Claude, different from the one the clip has now: its words (with emojis or not),
+    the credit line, then the hashtags if wanted. Hashtags among the words, and emojis when none are wanted, are
+    taken out whatever Claude writes."""
+    clip, cfg = _clip_for_claude(session, clip_id)
+    video = session.get(Video, clip.video_id)
+    credit = credit_line(video.attribution, video.creator_name) if video is not None else ""
+    current = clip.tiktok_caption or post_caption(clip.description or clip.title, credit, clip.hashtags or [])
+    answer = _ask(build_prompt(clip, video, "tiktok", emojis=emojis, avoid=current), cfg)
+    words = answer["caption"] or answer["title"]
+    if credit:  # the credit goes on a line of its own, wherever Claude put it
+        words = re.sub(rf"\s*[-–—|•·:]?\s*{re.escape(credit)}\.?", " ", words, flags=re.IGNORECASE)
+    words = tidy_caption(words, emojis=emojis)
+    handle = re.sub(r"[^a-z0-9]", "", (video.creator_name if video is not None else "").lower())
+    creator = [f"#{handle}"] if handle else []  # the creator's tag stays, however many Claude suggests
+    tags = merge_hashtags(answer["hashtags"], [*creator, *(clip.hashtags or [])]) if hashtags else []
+    return post_caption(words, credit, tags)

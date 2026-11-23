@@ -51,9 +51,10 @@ If rendering straight away is on, one `render` job per clip is queued:
 | Stage | What it does | Module |
 |---|---|---|
 | Framing the shot | Samples frames, finds faces, decides the layout and the crop | `editing/reframe.py` |
-| Building captions | Words for the clip → styled ASS subtitle script, fitted to the frame | `editing/captions.py`, `editing/fonts.py` |
-| Rendering video | One FFmpeg run: cut, reframe, burn captions, level the audio, encode | `editing/render.py` |
+| Building captions | Words for the clip → styled ASS subtitle script, fitted to the frame; subtitles and the hook title are switched on and off separately | `editing/captions.py`, `editing/fonts.py` |
+| Rendering video | One FFmpeg run: cut (without the parts left out), reframe, burn captions, level the audio, encode | `editing/render.py` |
 | Checking the export | Playable, right size and length, has sound, no black or silent stretch, captions inside the frame, no word cut in half | `editing/qc.py` |
+| Making the thumbnail | Scores 16 frames of the clip (sharp, lit, contrast, a clear face), frames the best one like the clip without captions, and puts the words on it where they cover no face, in a font that has every character (words in scripts that need shaping are left off). Never a frame from a part left out. A thumbnail that cannot be made never fails the render | `editing/thumbnail.py` |
 
 Every expensive result is cached per video in `data/work/<video>/` (audio, transcript, signals). Analysing the
 same video again with different options skips straight to scoring.
@@ -81,7 +82,9 @@ length, and the rules (stand-alone, start at a line, end after the payoff, never
 Claude Code command-line tool (`claude -p`) from an empty folder, with no tools of its own and no MCP servers,
 so it uses the user's own plan and sign-in and needs no API key. Claude answers with JSON picks; each is
 widened to whole sentences, de-duplicated, given the local 12-part breakdown for reference, and saved with
-Claude's title, hook, score and reason (`analysis_source = "claude"`). If the tool is missing, signed out or
+Claude's title, hook, score and reason (`analysis_source = "claude"`), plus the words for its thumbnail (and
+which one to colour), a TikTok caption and hashtags, all cleaned before use: at most 40 characters without
+emoji on the thumbnail, a caption of one line without hashtags, and at most eight safe hashtags. If the tool is missing, signed out or
 over the plan's limit, the local picks are saved and the job says why.
 
 **ChatGPT's second opinion** (`analysis/chatgpt_review.py`): ChatGPT then gets the same transcript and the
@@ -137,7 +140,9 @@ model nobody can inspect. It lives in `backend/app/analysis/`.
    or one second, if more than 55% of its distinctive words match one (the same story told twice), or if it
    matches a clip you already have.
 6. **Describing** (`describe.py`). Title, hook options and hashtags are taken from the words that were spoken.
-   Nothing is invented.
+   Nothing is invented. When Claude wrote no thumbnail words, they come from the title the same way: filler at
+   the start and small words at the end are left out, a phrase said over and over counts once, and the word in
+   colour is a price or number when there is one, else the last real word.
 7. **Explaining.** Every suggestion stores the evidence behind each sub-score, which is what the "Why this
    score" panel shows.
 
@@ -179,7 +184,7 @@ data/
   clipforge.db            SQLite database (WAL)
   uploads/<key>/          source.<ext>, thumb.jpg          uploaded videos and videos imported from links
   work/<key>/             audio.wav, transcript.json, audio.npz, visual.npz   reusable intermediates
-  clips/<key>/            clip.mp4, cover.jpg, captions.srt, captions.vtt, captions.ass, post.txt
+  clips/<key>/            clip.mp4, cover.jpg, thumbnail.jpg, captions.srt, captions.vtt, captions.ass, post.txt
   models/                 whisper/<name>/, yunet/
   fonts/                  optional caption fonts
   exports/<date>/         "Export to folder" output
@@ -216,9 +221,9 @@ All under `/api`. Interactive documentation is at `http://localhost:3000/api/doc
 | Area | Endpoints |
 |---|---|
 | Videos | upload (raw stream), check a link, import from a link, link from disk, list, read, update, delete, stream with seeking, thumbnail, analyze, transcript read and correct, timeline, make a clip by hand |
-| Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, thumbnail, caption words, SRT and VTT, post text, feedback |
+| Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, still frame, thumbnail (see, download, make again with other words, another word in colour or another moment), TikTok caption rewritten by Claude (with or without emojis and hashtags; your own saved with the clip), prompt edit (your words → checked changes → rendered again) and its undo, caption words, SRT and VTT, post text, feedback |
 | Jobs | list, read, cancel, retry |
-| System | health, hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, speech-model install, dashboard, notifications, search, projects |
+| System | health, shut down (in order, as `stop.ps1` does), hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, speech-model install, dashboard, notifications, search, projects |
 
 Request and response bodies are typed Pydantic models (`schemas.py`). Errors are JSON with an `error` message
 written for a person and, where useful, a `hint` saying what to do.
@@ -255,6 +260,37 @@ reuses the analysis's transcript step (or transcribes once, if the video was nev
 - a start or end that would chop a word moves to the word's edge, at most 0.6 s, and the work log says so;
 - ChatGPT gives a verdict only (`chatgpt_review.build_prompt(chosen_by_user=True)`), never additions;
 - the clip is saved with `origin="manual"` and rendered straight away.
+
+## Prompt edit
+
+`editing/prompt_edit.py` and `POST /api/clips/{id}/prompt-edit`. You describe in your own words what you want
+changed in a clip, and one request goes to Claude through the same Claude Code tool as the clip picker (no tools
+of its own, an empty folder, your plan). The request holds what you wrote; the clip as it is (cut, parts left
+out, the subtitle style with its effective values, hook title, layout, sound, thumbnail words); the fonts on this
+PC; what can be changed and within which limits; what ClipForge cannot do; and the transcript from two minutes
+before the clip to two minutes after it, each line in the clip with both its source and its clip times (cut down
+from the far ends when long). Claude answers with JSON: the changes, what is not possible, and a summary.
+
+Nothing Claude answers is used as it comes. `make_changes` checks every value against the editor's own limits:
+sizes and zoom are brought within range, colours must be #RRGGBB, fonts must be on this PC, styles and layouts
+are found by key or by name. A clip stays at least a second long, a cut never falls inside a word (a time inside
+one moves to the word's nearer edge), and parts left out stay inside the cut and are merged. It lists in words
+what changed, and what could not be done and why. Choosing a subtitle style starts from that style, as in the
+editor; a new cut resets subtitles edited by hand, and says so. Word corrections ("Jinxy" → "Jynxzi") are made on
+the subtitle words of the new cut, whatever their capitals, keeping the punctuation. The settings then pass
+`merge_settings`, the same checks as the editor's saves.
+
+When something changed, the clip as it was (`snapshot`: cut, settings, hook, title, subtitle words, thumbnail
+words and moment) is kept in `clips.last_edit` with what you asked and those lines, and a render is queued ahead
+of the queue. `POST .../prompt-edit/undo` puts the snapshot back and renders again. A clip that is rendering is
+left alone, since its render read the settings when it began. When nothing changed, nothing is saved or rendered.
+
+Parts left out are a clip setting, `cuts`: `[from, to]` pairs in seconds of the source video.
+`pipeline.clip_segments` takes them out of the segments last (after pause tightening), so the render, the
+subtitles, the SRT and VTT files and the export checks all follow them, and the thumbnail is never taken from
+them. Every save of a clip keeps them inside it: parts outside are dropped, parts across an end are trimmed to it,
+and a trim that would leave nothing to play is refused. The editor lists them under the timeline and can put
+each one back; its live preview still plays them.
 
 ## Publishing
 

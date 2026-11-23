@@ -56,6 +56,14 @@ $bindPort = [int]$bindPort
 
 $listener = Get-NetTCPConnection -LocalPort $bindPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) {
+    $alreadyRunning = $false
+    try { $alreadyRunning = ((Invoke-RestMethod -TimeoutSec 3 -Uri "http://127.0.0.1:$bindPort/api/health").status -eq "ok") } catch { }
+    if ($alreadyRunning) {
+        # Started again (the desktop shortcut, say) while it runs: just open it.
+        Write-Ok "ClipForge is already running: http://localhost:$bindPort"
+        if (-not $NoBrowser) { Start-Process "http://localhost:$bindPort" }
+        exit 0
+    }
     Write-Fail "Port $bindPort is already in use (process $($listener.OwningProcess)). ClipForge may already be running: open http://localhost:$bindPort"
     Write-Host "            To stop a running copy:  powershell -ExecutionPolicy Bypass -File scripts\stop.ps1"
     Write-Host "            To use another port:     powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Port 3100"

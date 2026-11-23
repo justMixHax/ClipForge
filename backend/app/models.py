@@ -185,6 +185,15 @@ class Clip(Base):
     file_path: Mapped[str] = mapped_column(Text, default="")
     thumb_path: Mapped[str] = mapped_column(Text, default="")
     file_size: Mapped[int] = mapped_column(Integer, default=0)
+    # the thumbnail: the words on it (empty: from the title), the one in colour, the source time of its picture,
+    # and the file
+    cover_text: Mapped[str] = mapped_column(String(120), default="")
+    cover_word: Mapped[str] = mapped_column(String(60), default="")
+    cover_time: Mapped[float | None] = mapped_column(Float, default=None)
+    cover_path: Mapped[str] = mapped_column(Text, default="")
+    tiktok_caption: Mapped[str] = mapped_column(Text, default="")  # your own caption; empty: the automatic one
+    # the last prompt edit: what you asked for, what changed, what could not be done, and the clip before it (undo)
+    last_edit: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     out_width: Mapped[int] = mapped_column(Integer, default=0)
     out_height: Mapped[int] = mapped_column(Integer, default=0)
     out_duration: Mapped[float] = mapped_column(Float, default=0.0)

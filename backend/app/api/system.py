@@ -22,7 +22,7 @@ from ..db import get_db, utcnow
 from ..editing.captions import PRESET_LABELS, PRESETS
 from ..editing.fonts import available_fonts
 from ..editing.reframe import ASPECTS, LAYOUT_LABELS
-from ..errors import ClipForgeError, NotFound
+from ..errors import ClipForgeError, Conflict, NotFound
 from ..jobs import queue
 from ..models import FEEDBACK_LABELS, Account, Clip, Feedback, Job, Notification, Post, Project, Video
 from ..schemas import CleanupIn, ProjectIn, ProjectOut, ProjectPatch, SecretIn, SettingsIn
@@ -45,6 +45,20 @@ def health(request: Request) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------- hardware
+@router.post("/system/shutdown")
+def shut_down(session: Session = Depends(get_db)) -> dict:
+    """Stop ClipForge on this PC from the app, the same orderly way as scripts/stop.ps1: no new requests, and a
+    job that is running goes back in the queue to continue the next time it starts."""
+    from .. import serve
+
+    jobs = session.scalar(select(func.count(Job.id)).where(Job.status.in_(queue.ACTIVE))) or 0
+    if not serve.request_stop():
+        raise Conflict("This copy of ClipForge was not started with start.ps1 or its desktop shortcut, so it cannot "
+                       "stop itself from here. Close the window it runs in.")
+    log.info("shutdown asked for from the app", extra={"jobs": jobs})
+    return {"stopping": True, "jobs": jobs}
+
+
 @router.get("/system/hardware")
 def read_hardware(session: Session = Depends(get_db)) -> dict:
     hw = hardware.detect()
@@ -134,6 +148,7 @@ def cleanup(body: CleanupIn, session: Session = Depends(get_db)) -> dict:
         for clip in session.scalars(select(Clip).where(Clip.review_status == "rejected", Clip.file_path != "")):
             freed += storage.remove_tree(settings.clips_dir / clip.storage_key)
             clip.file_path, clip.thumb_path, clip.file_size, clip.render_status = "", "", 0, "none"
+            clip.cover_path = ""
     else:  # failed_jobs
         finished = list(session.scalars(select(Job).where(Job.status.in_(("failed", "cancelled", "succeeded")),
                                                           Job.finished_at < utcnow() - timedelta(days=7))))

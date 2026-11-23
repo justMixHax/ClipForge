@@ -192,7 +192,7 @@ def queue_posts(session: Session, requests: list[PostRequest], *, post_again: bo
                          title=request.title.strip()[:300], caption=request.caption.strip()[:5000],
                          hashtags=clean_tags(request.hashtags), privacy=request.privacy,
                          options=clean_options(request.options), clip_title=clip.title[:300],
-                         account_name=account.name[:200],
+                         account_name=account.name[:200], created_at=now,  # counted for the daily limit at now
                          detail="Waiting for its time." if when is not None else "Waiting to be uploaded."))
     if problems:
         raise ClipForgeError("Nothing was queued. " + " ".join(dict.fromkeys(problems)))

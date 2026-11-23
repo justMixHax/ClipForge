@@ -8,15 +8,15 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 792 tests, plus a type-check of the interface. No speech model is needed;
+The fast suite: 899 tests, plus a type-check of the interface. No speech model is needed;
 tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 800
-tests, about five minutes. They need the sample video, which is not kept in Git:
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 907
+tests, about seven minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
@@ -25,8 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 23 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 800 passed,
-0 failed, 0 skipped, in 4 minutes 48 seconds.
+**Last full run:** 23 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 907 passed,
+0 failed, 0 skipped, in 6 minutes 16 seconds.
 
 ## How the tests are built
 
@@ -53,16 +53,20 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 | `test_reframe.py` | 149 | Layout decisions and crop maths for every shape and layout, facecam detection on synthetic frames; the gameplay under the camera leaves out the stream's own facecam in every corner when that costs little, and stays centred when it would cost too much |
 | `test_render.py` | 28 | Real renders: every layout at every shape, frame-accurate cuts, joined segments, caption placement and width for every font, silent sources, volume levelling, noise reduction, frame rate, cancellation, failure clean-up |
 | `test_qc.py` | 8 | The export checks catch wrong size, wrong length, missing sound, black frames, silence |
-| `test_pipeline.py` | 14 | The whole analyse and render jobs: stored results, re-use of the transcript, re-analysis keeping what you approved, cancellation, missing source, missing model, render failure, fallback from graphics card to processor, pause on shutdown |
+| `test_pipeline.py` | 21 | The whole analyse and render jobs: stored results, re-use of the transcript, re-analysis keeping what you approved, cancellation, missing source, missing model, render failure, fallback from graphics card to processor, pause on shutdown; every render makes a thumbnail, a thumbnail that cannot be made never costs the clip, a title the fonts cannot draw gives a thumbnail without words and the log says so, a render still lands while the old video is open in the browser, subtitles switched off are left out while the hook title stays, and with both off nothing is burned in; parts left out are cut from the render, and its thumbnail is never taken from them |
 | `test_queue.py` | 14 | Claiming, progress, heartbeat, cancel, retry, recovery of interrupted jobs, attempt limit |
 | `test_api.py`, `test_api_library.py` | 67 | Upload and its rejections, linking from disk, playback with seeking, clips, captions, feedback, batch actions, manual order, variants, caption files, post text, export, projects, cleanup, storage, settings, search, cross-site and wrong-host requests, persistence across a restart, honest feature status |
 | `test_downloader.py`, `test_import.py` | 69 | Importing from a link, with the real downloader against a web site started on this PC for the test: download, progress, cancel, size limit, missing video, page without a video, unreachable site; which links are accepted; failures explained in plain words; the import job with source and rights stored, duplicates, disk-space check, pause and resume; the API refusing to start without a stated right to clip |
-| `test_timecode.py`, `test_moments.py` | 69 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word, never leaving less than a second of clip; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log |
+| `test_timecode.py`, `test_moments.py` | 70 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word, never leaving less than a second of clip; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log; Claude's thumbnail words and TikTok caption for your moment |
 | `test_publishing_adapters.py` | 29 | YouTube, TikTok and Instagram against stand-ins of their APIs built from the documentation: sign-in with PKCE (checked against the standard's own example), token renewal, a resumable upload that continues after a break, a retried post that resumes instead of uploading twice, TikTok's chunk rules, a Reel never published twice, quota and refusal messages |
 | `test_publishing_service.py`, `test_publishing_api.py` | 46 | The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; date ranges by when a post goes live; Claude's post text; honest feature status and dashboard numbers |
-| `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 45 | File-name and path safety, encrypted credentials, masking of credentials in logs, where the server listens and how it stops |
-| `test_claude_review.py` and the Claude tests in `test_pipeline.py` | 16 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained, and the local rules take over when Claude cannot be reached |
-| `test_ffmpeg_service.py`, `test_hardware.py` | 16 | Probing, progress, error reporting, encoder tests, the graphics card is only recommended after passing its test |
+| `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 49 | File-name and path safety, encrypted credentials, masking of credentials in logs, where the server listens and how it stops; the Shut down button stops a real running server in order, says so when it cannot, and another website cannot press it |
+| `test_claude_review.py` and the Claude tests in `test_pipeline.py` | 22 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained, and the local rules take over when Claude cannot be reached; the thumbnail words, TikTok caption and hashtags Claude writes are asked for, cleaned (no emoji, one line, safe hashtags, a number sign before a number kept) and go with the clip |
+| `test_chatgpt_review.py` | 40 | ChatGPT as the second opinion, with a stand-in for the Codex tool: verdicts and additions read even with text around them, odd answers ignored or refused cleanly, failures explained (a model the plan does not offer is named), the prompt holds the transcript and the numbered picks, the tool is read-only with tools and web search off, uses your ChatGPT sign-in and never an API key, only a real program is run, model names are checked, verdicts are recorded on each clip, at most two new moments are added and only inside your length; an addition comes with thumbnail words, a caption and hashtags too |
+| `test_thumbnail.py`, `test_covers.py`, `test_post_text.py` | 39 | Thumbnails: the words come from the clip's own line in any script (filler and a repeated phrase left out, ending on a real word; a price or the last real word in colour), words you type become one short line without emoji; words no font here can draw properly are left off rather than shown as boxes, and refused when typed; one long word is made smaller until it fits; the words sit under the camera or out of the way of a face, inside the edges and above TikTok's buttons; the moment chosen is sharp and lit, and never from a part left out; the picture is framed like the clip; a picture being sent to the browser is replaced once it is free. Through the API: shown and downloaded, words, colour and moment changed, a moment outside the clip refused, kept for the render before one, copied by export. The TikTok caption is the words, the credit and the hashtags; emojis can be taken out of a caption |
+| `test_tiktok_caption.py` | 9 | The TikTok caption: Claude rewrites it from what is said (a stand-in answers), with or without emojis and hashtags, and emojis or hashtags it adds anyway are taken out when not wanted; the credit stays, on a line of its own, and so does the creator's hashtag; nothing is saved until you save; your own caption is kept exactly as written and used in the post text; an empty one goes back to the automatic caption; one longer than 4,000 characters is refused; Claude signed out or switched off is explained |
+| `test_prompt_edit.py` | 38 | The prompt edit, with a stand-in for Claude: the request shows Claude what you wrote, the clip as it is, its timed words (both source and clip times) and what can be changed, and a long transcript is cut down from the far ends; answers are read even with text around them, and one that cannot be read is an error, not a guess. Every change is checked: a new cut never falls inside a word (it moves to the word's nearer edge), stays inside the video and at least a second long; times are read as seconds or as a clock; parts left out stay inside the cut, are merged, can all be put back, and never leave less than a second; subtitle sizes are kept within range, unknown fonts and colours that are not #RRGGBB are refused with the reason, fonts are found whatever their capitals, a style chosen by its name starts from that style; hook text, timing and switch; layout, shape, zoom, subject, sound, pauses, title and thumbnail words and moment; what ClipForge cannot do is reported; asking for what the clip already has changes nothing; the clip given is never changed in place; subtitles edited by hand are reset by a new cut, which says so; word corrections whatever their capitals, keeping the punctuation. Through the API: the clip is changed and rendered again, the copy for undo stays out of the responses, undo puts it back and renders again, there is nothing to undo before an edit, nothing is rendered when nothing changed, a word fix reaches the subtitles, a clip being rendered is left alone, nothing is sent to Claude when it is switched off, empty and very long requests are refused, a signed-out Claude leaves the clip as it was, and parts left out are stored with the clip and checked, stay inside it whenever it is trimmed, and a trim that would leave only them is refused |
+| `test_ffmpeg_service.py`, `test_hardware.py` | 17 | Probing, progress, error reporting, encoder tests, the graphics card is only recommended after passing its test; frames read a few times a minute show the picture of the time asked for |
 | `test_transcribe_real.py` (slow) | 7 | The real speech model on the sample: key phrases heard, at least 90% of the scripted words, word times within half a second, faster than real time. One test repeats it on the graphics card (same words, at least 10× real time) and is skipped where no usable graphics card is found |
 | `test_pipeline_real.py` (slow) | 1 | The acceptance test below |
 
@@ -177,8 +181,29 @@ started sending transcripts to ChatGPT. All were fixed in the same change, each 
 of the fixed version found 11 narrower points; 10 were fixed the same way and one was declined with a reason
 (noted in the review file). A third review, of the publishing commit on 23 November, ran on gpt-5.6-terra
 because the ChatGPT plan no longer offered Astra that day; it found 3 real problems (1 serious), all fixed with
-tests. Since then this PC is signed in to a ChatGPT Go account, which does not include Astra either: code reviews
+tests. A review of the thumbnails (23 November, gpt-5.6-terra) found 2 problems: a title in another script lost
+all its words and got English ones instead, and one very long typed word could run off the picture. Both were
+fixed with tests. Since then this PC is signed in to a ChatGPT Go account, which does not include Astra either: code reviews
 use gpt-5.6-terra (the script's default now) and ClipForge's second opinion uses gpt-6-luna.
+
+## Thumbnails on real clips, 23 November 2026
+
+- **Five clips the local rules picked** ("Fan Mail is Over..."): a thumbnail each in about 2 seconds. The words
+  taken from their titles first read badly ("MY GOD OH MY GOD", "WOW THE HERB TREE OKAY" with OKAY in colour, a
+  lone "2" in colour); the word rules were fixed, with those titles as tests ("OH MY GOD", "WOW THE HERB TREE",
+  "SEASON 2 IS TRASH").
+- **A face that was not there.** One thumbnail showed the streamer bent over, although the frame picker had
+  scored a clear, expressive face at that moment. Measured against an exact decode: the fast seek used for the
+  thumbnail was exact, but every sampled frame came half a sampling interval late (FFmpeg's `fps` filter rounds
+  to the nearest slot), almost a second here. Fixed in the shared frame reader, with a test; the picture
+  analysis uses the same reader and its tests, including the one comparing fast and full decoding, still pass.
+- **Claude on a real video** ("How to Play Rob Run!"): Claude picked a clip and wrote the thumbnail words
+  "ROBBING A STORE", a TikTok caption and four hashtags; ChatGPT added a clip. Both renders made thumbnails with
+  the streamer's face clear at the top and the words just under the camera. The clip pages, the Library cards
+  and the editor's Thumbnail tab were checked in the browser: the picture, the words, the word in colour, the
+  moment, Best moment (it found the same moment again) and the TikTok caption with Copy.
+- **A re-render while the clip was playing** failed: Windows refused to replace `clip.mp4` while the browser had
+  it open. Fixed, with a test: the new video then gets a name of its own, and the old one is tidied up later.
 
 ## Defects the tests found
 
@@ -200,6 +225,10 @@ Kept here because a test suite that never finds anything proves little.
 | ChatGPT's review of the publishing commit (23 November) | A new YouTube upload sent no Content-Range header (the stand-in YouTube accepted that; the real one may not); the word rule could squeeze a one-second selection below a second or put a start past the end; the post list's date filter ignored when a post went live | Yes, each with a test; the stand-in YouTube now refuses an upload without Content-Range |
 | Looking at real rendered clips | The gameplay panel under the facecam showed the stream's own facecam a second time | Yes: slid away from it, or cut just above it, when that costs little |
 | A morning when the chosen ChatGPT model was not offered | ClipForge said only "unexpected answer" and showed Codex's start-up banner; a token-refresh warning earlier in Codex's log could even make it claim a sign-out | Yes: Codex's final error decides, the reason is named, and Settings lists the models the plan offers |
+| ChatGPT's review of the thumbnails (23 November) | A title in Cyrillic, Arabic or Japanese lost every word and the thumbnail said "WATCH THIS" instead; one 40-letter word could run off the picture | Yes, with tests: every script keeps its words, a font with the characters is chosen (scripts that need shaping are left off the picture, not drawn as boxes), and a long word shrinks until it fits |
+| Adding the subtitles switch (23 November) | Turning subtitles off also took the hook title out of the render, although the editor's preview still showed it; and a subtitle script from an earlier render was left in the clip's folder | Yes, with tests: each has its own switch |
+| Thumbnails on real clips | The frame reader handed over each sampled frame half a sampling interval late, so a thumbnail could show a different moment than the one the picker scored | Yes, with a test |
+| Pressing Render again while the clip played in the browser | Windows refused to replace the video file in use, and the render failed at the very end | Yes, with a test: the new video takes a name of its own |
 | Real-model transcription test | The speech model occasionally returns a word with no duration or one stretched across a pause | Yes: word times are corrected against the audio |
 
 ## Not tested

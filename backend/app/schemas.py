@@ -215,6 +215,7 @@ class ClipPatch(Strict):
     manual_rank: int | None = Field(None, ge=0, le=100000)
     settings: dict[str, Any] | None = None
     captions: list[dict[str, Any]] | None = None
+    tiktok_caption: str | None = Field(None, max_length=4000)  # "": back to the automatic caption
 
 
 class ClipOut(FromRow):
@@ -258,6 +259,13 @@ class ClipOut(FromRow):
     updated_at: datetime
     file_url: str = ""
     thumb_url: str = ""
+    cover_url: str = ""
+    cover_text: str = ""                     # the words on the thumbnail (from the title when none were chosen)
+    cover_word: str = ""
+    cover_time: float | None = None          # the source time of its picture
+    post_caption: str = ""                   # the caption to paste into TikTok: yours, else words, credit, hashtags
+    tiktok_caption: str = ""                 # the caption you wrote or saved, if any
+    last_edit: dict[str, Any] | None = None  # the last prompt edit: what you asked, what changed, what could not
     video_title: str = ""
     creator_name: str = ""
     permission_status: str = ""
@@ -281,6 +289,30 @@ class BatchIn(Strict):
 
 class ReorderIn(Strict):
     ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class CoverIn(Strict):
+    text: str | None = Field(None, max_length=120)  # None: keep the words; "": back to the title's
+    word: str = Field("", max_length=60)            # the word to colour
+    time: float | None = None                       # the source time of the picture; None: keep it
+    auto: bool = False                              # let Forge pick the best moment again
+
+
+class TikTokCaptionIn(Strict):
+    emojis: bool = True
+    hashtags: bool = True
+
+
+class PromptEditIn(Strict):
+    instruction: str = Field(min_length=1, max_length=1000)  # what you want changed, in your own words
+
+
+class PromptEditOut(BaseModel):
+    summary: str
+    done: list[str]        # what changed
+    not_done: list[str]    # what was asked for but not made, and why
+    rendering: bool        # rendered again (nothing is rendered when nothing changed)
+    clip: ClipOut
 
 
 class ExportIn(Strict):

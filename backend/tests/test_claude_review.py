@@ -52,6 +52,30 @@ def test_unusable_picks_are_dropped_and_values_are_kept_in_range():
     assert picks[0].score == 100 and picks[0].category == "highlight"
 
 
+def test_claude_also_writes_the_thumbnail_words_a_tiktok_caption_and_hashtags():
+    (pick,) = claude_review.parse_answer(answer([story_pick(
+        thumb="he lost his phone", thumb_word="phone",
+        caption="He looked for 45 minutes.\nIt was in his hand. #storytime",
+        hashtags=["#GTA6", "fyp", "#lost phone", "#a", "#" + "x" * 40, "#gta6", "#2024"])]))
+
+    assert (pick.thumb, pick.thumb_word) == ("HE LOST HIS PHONE", "PHONE")
+    assert pick.caption == "He looked for 45 minutes. It was in his hand."
+    assert pick.hashtags == ["#GTA6", "#fyp", "#lostphone", "#storytime"]   # cleaned, each once, not numbers alone
+
+
+def test_an_answer_without_them_still_works_and_hashtags_may_come_as_one_line():
+    (pick,) = claude_review.parse_answer(answer([story_pick(hashtags="#gta6 #funny, fyp")]))
+
+    assert (pick.thumb, pick.thumb_word, pick.caption) == ("", "", "")
+    assert pick.hashtags == ["#gta6", "#funny", "#fyp"]
+
+
+def test_a_long_caption_is_cut_at_a_word_and_a_number_sign_stays_in_it():
+    (pick,) = claude_review.parse_answer(answer([story_pick(caption="The #1 cop " + "word " * 100)]))
+
+    assert len(pick.caption) <= 220 and pick.caption.endswith("word…") and pick.caption.startswith("The #1 cop")
+
+
 @pytest.mark.parametrize(("printed", "says"), [
     (json.dumps({"is_error": True, "result": "Failed to authenticate: OAuth session expired and could not be refreshed"}),
      "sign in"),
@@ -79,6 +103,17 @@ def test_the_prompt_holds_the_timed_transcript_and_the_rules():
     assert "never invent" in prompt.lower()
 
 
+def test_both_prompts_ask_for_thumbnail_words_a_tiktok_caption_and_hashtags():
+    prompts = [claude_review.build_prompt(SENTENCES, OPTIONS, title="Friday stream", creator="Kai", game="GTA",
+                                          action_times=[], duration=END),
+               claude_review.build_moment_prompt(SENTENCES, OPTIONS, start=STORY_START, end=None,
+                                                 title="Friday stream", creator="Kai", game="GTA", duration=END)]
+
+    for prompt in prompts:
+        assert all(f'"{key}"' in prompt for key in ("thumb", "thumb_word", "caption", "hashtags"))
+        assert "thumbnail" in prompt and "TikTok caption" in prompt
+
+
 def test_the_command_runs_with_no_tools_and_outside_the_project():
     args = claude_review.command("claude", "sonnet")
 
@@ -104,6 +139,21 @@ def test_a_pick_becomes_a_clip_on_whole_sentences_with_claudes_words():
     assert "Claude" in h.explanation and "punchline" in h.explanation
     assert set(h.subscores) >= {"hook", "payoff", "clarity"}                  # the 12-part breakdown is still there
     assert h.transcript_text.startswith("Can I tell you")
+
+
+def test_claudes_thumbnail_words_caption_and_hashtags_go_with_the_clip():
+    (h,) = run([story_pick(thumb="He lost his phone", thumb_word="phone", caption="He looked for 45 minutes.",
+                           hashtags=["#lostphone", "#storytime"])])
+
+    assert (h.extra["cover_text"], h.extra["cover_word"]) == ("HE LOST HIS PHONE", "PHONE")
+    assert h.description == "He looked for 45 minutes."
+    assert h.hashtags[:2] == ["#lostphone", "#storytime"] and len(h.hashtags) <= 6
+
+
+def test_without_a_caption_from_claude_the_description_is_the_title_as_before():
+    (h,) = run([story_pick()])
+
+    assert h.description == "He lost his phone in his own hand" and "cover_text" not in h.extra
 
 
 def test_overlapping_picks_are_merged_away_and_ranks_follow_the_score():

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, query } from "./api";
 import type {
-  Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PublishOverview,
-  PublishPost, SettingsBody, Video,
+  Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PromptEditResult,
+  PublishOverview, PublishPost, SettingsBody, Video,
 } from "./api";
 
 /** Refresh everything that can change when a job moves forward. */
@@ -103,6 +103,48 @@ export function usePatchClip() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => api.patch<Clip>(`/clips/${id}`, body),
+    onSuccess: (clip) => {
+      client.setQueryData(["clip", clip.id], clip);
+      client.invalidateQueries({ queryKey: ["clips"] });
+      client.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+/** Describe a change in your own words: Claude makes it and the clip is rendered again. */
+export function usePromptEdit() {
+  const client = useQueryClient();
+  const refresh = useRefreshAll();
+  return useMutation({
+    mutationFn: ({ id, instruction }: { id: number; instruction: string }) =>
+      api.post<PromptEditResult>(`/clips/${id}/prompt-edit`, { instruction }),
+    onSuccess: (result) => {
+      client.setQueryData(["clip", result.clip.id], result.clip);
+      refresh();
+    },
+  });
+}
+
+/** Put a clip back as it was before its last prompt edit (it is rendered again). */
+export function useUndoPromptEdit() {
+  const client = useQueryClient();
+  const refresh = useRefreshAll();
+  return useMutation({
+    mutationFn: (id: number) => api.post<Clip>(`/clips/${id}/prompt-edit/undo`),
+    onSuccess: (clip) => {
+      client.setQueryData(["clip", clip.id], clip);
+      refresh();
+    },
+  });
+}
+
+export type CoverBody = { text?: string; word?: string; time?: number; auto?: boolean };
+
+/** Change a clip's thumbnail: its words, the word in colour or its moment. */
+export function useRemakeCover() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: CoverBody }) => api.post<Clip>(`/clips/${id}/cover`, body),
     onSuccess: (clip) => {
       client.setQueryData(["clip", clip.id], clip);
       client.invalidateQueries({ queryKey: ["clips"] });

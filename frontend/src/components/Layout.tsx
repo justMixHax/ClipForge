@@ -1,13 +1,13 @@
 import {
-  BarChart3, Bell, BrainCircuit, Compass, LayoutDashboard, Library, Menu, Search, Send, Settings, SlidersHorizontal,
-  Sparkles, Workflow, X,
+  BarChart3, Bell, BrainCircuit, Compass, LayoutDashboard, Library, Menu, Power, Search, Send, Settings,
+  SlidersHorizontal, Sparkles, Workflow, X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api, query, type SearchHit } from "../lib/api";
 import { ago, clock, cx } from "../lib/format";
 import { useActiveJobs, useNotifications, useRefreshAll } from "../lib/hooks";
-import { Badge, Button, Input, Modal, Progress, Spinner } from "./ui";
+import { Badge, Button, Input, Modal, Progress, Spinner, useToast } from "./ui";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, built: true },
@@ -36,7 +36,7 @@ function Logo() {
   );
 }
 
-function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+function Sidebar({ onNavigate, onShutDown }: { onNavigate?: () => void; onShutDown: () => void }) {
   const jobs = useActiveJobs().data ?? [];
   const running = jobs.find((job) => job.status === "running");
   return (
@@ -68,6 +68,84 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         ) : (
           <p className="text-xs text-faint">Idle. Everything runs on this PC.</p>
         )}
+        <ShutDownButton jobs={jobs.length} onDone={onShutDown} />
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------------------------------- shutting down
+function ShutDownButton({ jobs, onDone }: { jobs: number; onDone: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const stop = async () => {
+    setBusy(true);
+    try {
+      await api.post("/system/shutdown");
+      setAsking(false);
+      onDone();
+    } catch (error) {
+      toast({ tone: "bad", title: "ClipForge could not shut down", body: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={() => setAsking(true)}
+        className="mt-2.5 inline-flex items-center gap-1.5 text-xs text-faint transition-colors hover:text-bad">
+        <Power className="h-3.5 w-3.5" />Shut down ClipForge
+      </button>
+      <Modal open={asking} onClose={() => setAsking(false)} title="Shut down ClipForge?"
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+            <Button variant="danger" onClick={stop} busy={busy}>{!busy && <Power className="h-4 w-4" />}Shut down</Button>
+          </>
+        )}>
+        <p className="text-[13px] text-muted">
+          ClipForge stops on this PC until you start it again with the <span className="text-ink">ClipForge</span> shortcut
+          on your desktop. Your videos, clips and settings are kept.
+        </p>
+        {jobs > 0 && (
+          <p className="mt-2 text-[13px] text-warn">
+            {jobs === 1 ? "1 job is not finished. It pauses and continues" : `${jobs} jobs are not finished. They pause and continue`} when
+            ClipForge starts again.
+          </p>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+/** Shown once ClipForge has shut down. It opens the app again by itself once it is running again. */
+function ShutDownScreen() {
+  useEffect(() => {
+    let sawItStop = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch("/api/health", { cache: "no-store" });
+        if (!response.ok) sawItStop = true;
+        else if (sawItStop) window.location.reload();
+      } catch {
+        sawItStop = true;
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="app-glow flex min-h-screen items-center justify-center p-6">
+      <div className="max-w-md rounded-2xl border border-line bg-panel p-8 text-center animate-rise">
+        <Power className="mx-auto h-8 w-8 text-faint" />
+        <h1 className="mt-4 text-lg font-semibold text-ink">ClipForge is shut down</h1>
+        <p className="mt-2 text-[13px] text-muted">
+          Nothing of it runs on this PC now. Your videos, clips and settings are kept, and unfinished jobs continue next time.
+        </p>
+        <p className="mt-4 text-[13px] text-muted">
+          To start it again, double-click <span className="text-ink">ClipForge</span> on your desktop. This page opens it
+          again by itself once it is running.
+        </p>
       </div>
     </div>
   );
@@ -198,17 +276,33 @@ function Notifications() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
+  const [down, setDown] = useState(false);
+  // Once shut down, the whole app (and every request it keeps making) gives way to the goodbye screen.
+  return down ? <ShutDownScreen /> : <Shell onShutDown={() => setDown(true)}>{children}</Shell>;
+}
+
+function Shell({ children, onShutDown }: { children: ReactNode; onShutDown: () => void }) {
   const [menu, setMenu] = useState(false);
   const location = useLocation();
   const current = NAV.find((item) => (item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to)));
   const jobs = useActiveJobs();
+  // When a job starts or finishes (a render done, say), every page reloads what it shows.
+  const refresh = useRefreshAll();
+  const signature = (jobs.data ?? []).map((job) => `${job.id}:${job.status}`).join("|");
+  const previous = useRef(signature);
+  useEffect(() => {
+    if (previous.current !== signature) {
+      previous.current = signature;
+      refresh();
+    }
+  }, [signature, refresh]);
   return (
     <div className="app-glow flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 border-r border-line bg-panel/60 backdrop-blur lg:block"><Sidebar /></aside>
+      <aside className="sticky top-0 hidden h-screen w-[232px] shrink-0 border-r border-line bg-panel/60 backdrop-blur lg:block"><Sidebar onShutDown={onShutDown} /></aside>
       {menu && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMenu(false)} />
-          <aside className="absolute inset-y-0 left-0 w-[260px] border-r border-line bg-panel animate-fade"><Sidebar onNavigate={() => setMenu(false)} /></aside>
+          <aside className="absolute inset-y-0 left-0 w-[260px] border-r border-line bg-panel animate-fade"><Sidebar onNavigate={() => setMenu(false)} onShutDown={onShutDown} /></aside>
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">

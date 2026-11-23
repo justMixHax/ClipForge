@@ -131,3 +131,81 @@ def test_the_server_stops_in_order_even_while_a_browser_still_has_a_request_open
         if server.poll() is None:
             server.kill()
             server.wait(timeout=10)
+
+
+# --------------------------------------------------------------------------------- the Shut down button
+def test_the_app_can_ask_to_be_shut_down_in_order(data_dir: Path, tmp_path: Path, monkeypatch):  # noqa: ANN001
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    stop_file = tmp_path / "server.stop"
+    monkeypatch.setitem(serve.WATCHED, "stop_file", stop_file)
+    with TestClient(create_app(), base_url="http://127.0.0.1:3000") as client:
+        response = client.post("/api/system/shutdown")
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"stopping": True, "jobs": 0} and stop_file.exists()
+
+
+def test_a_copy_not_started_with_start_ps1_says_it_cannot_stop_itself(data_dir: Path, monkeypatch):  # noqa: ANN001
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.setattr(serve, "WATCHED", {})
+    with TestClient(create_app(), base_url="http://127.0.0.1:3000") as client:
+        response = client.post("/api/system/shutdown")
+
+    assert response.status_code == 409 and "start.ps1" in response.json()["error"]
+
+
+def test_another_website_cannot_shut_it_down(data_dir: Path, tmp_path: Path, monkeypatch):  # noqa: ANN001
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    stop_file = tmp_path / "server.stop"
+    monkeypatch.setitem(serve.WATCHED, "stop_file", stop_file)
+    with TestClient(create_app(), base_url="http://127.0.0.1:3000") as client:
+        response = client.post("/api/system/shutdown", headers={"Origin": "https://example.com"})
+
+    assert response.status_code == 403 and not stop_file.exists()
+
+
+def test_the_shut_down_button_really_stops_a_running_server(data_dir: Path):
+    import os
+    import socket
+    import subprocess
+    import sys
+    import time
+    import urllib.request
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    env = {**os.environ, "CLIPFORGE_DATA_DIR": str(data_dir), "CLIPFORGE_PORT": str(port),
+           "CLIPFORGE_SPAWN_WORKER": "0", "CLIPFORGE_ENV_FILE": ""}
+    backend = Path(__file__).resolve().parent.parent
+    server = subprocess.Popen([sys.executable, "-m", "app.serve"], cwd=backend, env=env,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2):
+                    break
+            except OSError:
+                assert time.monotonic() < deadline, "the server did not start"
+                time.sleep(0.3)
+
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/system/shutdown", data=b"{}", method="POST",
+                                         headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 200
+
+        assert server.wait(timeout=15) == 0                     # it stopped by itself, in order
+        assert not (data_dir / "server.stop").exists()          # and tidied up after itself
+    finally:
+        if server.poll() is None:
+            server.kill()

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { Link, useParams } from "react-router-dom";
 import { ClipThumb, ScoreRing } from "../components/clips";
 import { JobStages } from "../components/JobStages";
+import { ThumbnailPanel, TikTokCaption } from "../components/thumbnail";
 import { Timeline, type TimedWord } from "../components/Timeline";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, NumberField, Segmented, Select, Spinner, Switch, Textarea, useToast } from "../components/ui";
 import { api, query, type CaptionPreset, type CaptionSettings, type CaptionWord, type Clip, type ClipSettings, type Options, type Segment, type Timeline as TimelineData, type Video } from "../lib/api";
@@ -328,7 +329,7 @@ export default function Editor() {
   const [saved, setSaved] = useState("");
   const history = useRef<{ past: Draft[]; future: Draft[] }>({ past: [], future: [] });
   const [, bump] = useState(0);
-  const [tab, setTab] = useState<"captions" | "style" | "layout" | "details">("captions");
+  const [tab, setTab] = useState<"captions" | "style" | "layout" | "thumbnail" | "details">("captions");
   const [view, setView] = useState<"edit" | "result">("edit");
   const [snap, setSnap] = useState(true);
   const [time, setTime] = useState(0);
@@ -609,15 +610,34 @@ export default function Editor() {
               loud={timeline.data?.loud_events ?? []} cuts={timeline.data?.cuts ?? []} words={sourceWords} snap={snap}
               onSeek={seek} onDragStart={remember} onRange={(start, end) => setRange(start, end, false)} />
             {timeline.data && !timeline.data.analysed && <p className="text-xs text-faint">No waveform: this video's working files were cleared. Analyse it again to bring the waveform back.</p>}
+            {(draft.settings.cuts ?? []).length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
+                <span className="text-muted">Left out:</span>
+                {(draft.settings.cuts ?? []).map(([from, to], index) => (
+                  <span key={`${from}-${to}`} className="inline-flex items-center gap-1 rounded-full border border-line py-0.5 pl-2.5 pr-1 tabular text-ink">
+                    {clock(from, true)} – {clock(to, true)}
+                    <button type="button" className="rounded-full p-0.5 text-faint hover:bg-hover hover:text-ink" title="Put this part back in the clip" aria-label="Put this part back"
+                      onClick={() => setSettings({ cuts: (draft.settings.cuts ?? []).filter((_, other) => other !== index) })}><XCircle className="h-3.5 w-3.5" /></button>
+                  </span>
+                ))}
+                <span className="text-xs text-faint">The preview plays these parts; the render leaves them out.</span>
+              </div>
+            )}
           </Card>
         </div>
 
         <Card className="self-start p-4">
           <Segmented value={tab} onChange={setTab} className="mb-4 w-full [&>button]:flex-1"
-            options={[{ value: "captions", label: "Captions" }, { value: "style", label: "Style" }, { value: "layout", label: "Layout" }, { value: "details", label: "Details" }]} />
+            options={[{ value: "captions", label: "Captions" }, { value: "style", label: "Style" }, { value: "layout", label: "Layout" }, { value: "thumbnail", label: "Thumbnail" }, { value: "details", label: "Details" }]} />
           {tab === "captions" && <CaptionsPanel draft={draft} words={words} edited={draft.captions !== null} time={time} onSeek={seek} onEdit={editWord} onReset={() => change({ ...draft, captions: null })} />}
           {tab === "style" && <StylePanel draft={draft} options={options.data} preset={preset} setCaptions={setCaptions} setSettings={setSettings} setField={setField} />}
           {tab === "layout" && <LayoutPanel draft={draft} options={options.data} reason={plan?.reason} setSettings={setSettings} />}
+          {tab === "thumbnail" && (
+            <div className="space-y-5">
+              <ThumbnailPanel clip={c} frameTime={() => time} />
+              <TikTokCaption clip={c} />
+            </div>
+          )}
           {tab === "details" && <DetailsPanel draft={draft} clip={c} setField={setField} />}
         </Card>
       </div>

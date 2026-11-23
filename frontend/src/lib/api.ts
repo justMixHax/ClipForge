@@ -201,6 +201,8 @@ export interface ClipSettings {
   audio: { normalize?: boolean; denoise?: boolean };
   remove_silence: boolean;
   silence_threshold?: number;
+  /** Parts left out of the clip: [from, to] in seconds of the source video. */
+  cuts?: [number, number][] | null;
   quality: string;
   fps: number;
   preset: string;
@@ -248,10 +250,39 @@ export interface Clip {
   updated_at: string;
   file_url: string;
   thumb_url: string;
+  /** The thumbnail made for the clip (words on its best moment); empty until it is rendered. */
+  cover_url: string;
+  cover_text: string;
+  cover_word: string;
+  /** The source time of the thumbnail's picture. */
+  cover_time: number | null;
+  /** The caption to paste into TikTok: yours if you saved one, else the words, the credit and the hashtags. */
+  post_caption: string;
+  /** The caption you wrote or saved for TikTok; empty for the automatic one. */
+  tiktok_caption: string;
+  /** The last prompt edit: what you asked for, what changed and what could not be done. */
+  last_edit: PromptEdit | null;
   video_title: string;
   creator_name: string;
   permission_status: Permission | "";
   feedback: string[];
+}
+
+export interface PromptEdit {
+  instruction: string;
+  summary: string;
+  done: string[];
+  not_done: string[];
+  at: string;
+}
+
+export interface PromptEditResult {
+  summary: string;
+  done: string[];
+  not_done: string[];
+  /** False when nothing changed: then nothing is rendered. */
+  rendering: boolean;
+  clip: Clip;
 }
 
 export interface ClipList {

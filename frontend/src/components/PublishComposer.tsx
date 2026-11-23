@@ -107,7 +107,7 @@ export function PublishComposer({ overview, onQueued }: { overview: PublishOverv
                     <button key={clip.id} type="button" onClick={() => setPicked(toggle(picked, clip.id))}
                       className={cx("overflow-hidden rounded-lg border text-left transition-colors", on ? "border-accent bg-accent/10" : "border-line bg-bg/40 hover:border-line-strong")}>
                       <div className="relative aspect-[9/16] max-h-48 w-full bg-black">
-                        {clip.thumb_url && <img src={clip.thumb_url} alt="" className="h-full w-full object-cover" />}
+                        {(clip.cover_url || clip.thumb_url) && <img src={clip.cover_url || clip.thumb_url} alt="" className="h-full w-full object-cover" />}
                         <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[11px] text-white">{clock(clip.out_duration || clip.end - clip.start)}</span>
                         {on && <span className="absolute left-1 top-1 rounded bg-accent px-1.5 text-[11px] font-semibold text-[#1a0d05]">Picked</span>}
                       </div>

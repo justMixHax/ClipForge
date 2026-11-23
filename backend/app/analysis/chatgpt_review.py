@@ -24,7 +24,7 @@ from typing import Any
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
-from .claude_review import Pick, clock
+from .claude_review import POST_FIELDS, POST_TEXT, Pick, clock, post_text
 from .scoring import CATEGORY_LABELS
 
 DEFAULT_MODEL = "gpt-6.2-astra"
@@ -182,10 +182,12 @@ Then, under "additions", give at most {MAX_ADDITIONS} clearly better moments tha
 Rules: use only times from the transcript. Never invent words, quotes or events. Category is one of:
 {', '.join(CATEGORY_LABELS)}. Scores are honest 0-100 estimates, not promises.
 
+{POST_TEXT.replace("every clip you give", "every addition")}
+
 Answer with JSON only:
 {{"verdicts": [{{"pick": 1, "verdict": "agree", "reason": "one short sentence"}}],
 "additions": [{{"start": 251.0, "end": 301.5, "title": "short title", "hook": "on-screen line, max 12 words",
-"category": "funny", "score": 80, "reason": "one short sentence"}}]}}
+"category": "funny", "score": 80, "reason": "one short sentence", {POST_FIELDS}}}]}}
 Times are in seconds from the start of the video.
 
 Transcript, one line per sentence, with its start time:
@@ -271,7 +273,7 @@ def parse_answer(text: str) -> Review:
             hook=str(item.get("hook") or "").strip()[:120],
             category=category if category in CATEGORY_LABELS else "highlight",
             score=round(min(100.0, max(0.0, score if score is not None else 60.0)), 1),
-            reason=str(item.get("reason") or "").strip()[:400]))
+            reason=str(item.get("reason") or "").strip()[:400], **post_text(item)))
     return review
 
 

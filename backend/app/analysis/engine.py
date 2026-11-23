@@ -23,7 +23,7 @@ from ..transcription.sentences import Sentence, Word
 from .audio import AudioFeatures, _smooth
 from .candidates import WindowOptions, enumerate_windows
 from .dedupe import ExistingClip, select_distinct, time_overlap
-from .describe import build_description, build_hashtags, build_hooks, build_title
+from .describe import build_description, build_hashtags, build_hooks, build_title, merge_hashtags
 from .feedback import FeedbackProfile
 from .presets import DIMENSIONS, effective_weights
 from .scoring import ScoreOptions, ScoringContext, _clock
@@ -312,6 +312,11 @@ def _action_highlights(audio: AudioFeatures | None, visual: VisualFeatures | Non
 
 
 # ----------------------------------------------------------------------------------------- Claude's picks
+def _cover(pick: Any) -> dict[str, str]:
+    """The thumbnail words an AI wrote for its pick, if it did."""
+    return {"cover_text": pick.thumb, "cover_word": pick.thumb_word} if getattr(pick, "thumb", "") else {}
+
+
 def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: AudioFeatures | None,
                           visual: VisualFeatures | None, options: HighlightOptions, picks: Sequence[Any], *,
                           duration: float, existing: Sequence[ExistingClip] = (),
@@ -357,10 +362,11 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
             explanation=f"{'Added by ChatGPT' if source == 'chatgpt' else 'Picked by Claude'}: {reason}",
             evidence=evidence, category=pick.category,
             title=title, hook_text=hook, hook_options=[hook] + ([title] if title != hook else []),
-            hashtags=build_hashtags(pick.category, options.preset, options.game_style, creator,
-                                    f"{video_title} {said}"),
-            description=build_description(title, creator), transcript_text=said, rank=0,
-            analysis_source=source, peak_time=round(full.peak_time if full is not None else start, 2)))
+            hashtags=merge_hashtags(pick.hashtags, build_hashtags(pick.category, options.preset, options.game_style,
+                                                                  creator, f"{video_title} {said}")),
+            description=build_description(pick.caption or title, creator), transcript_text=said, rank=0,
+            analysis_source=source, peak_time=round(full.peak_time if full is not None else start, 2),
+            extra=_cover(pick)))
     found.sort(key=lambda h: -h.score)
     for rank, h in enumerate(found, 1):
         h.rank = rank
@@ -482,7 +488,9 @@ def moment_highlight(words: list[Word], sentences: list[Sentence], audio: AudioF
     said = " ".join(w.text for w in words if w.start >= start - 0.05 and w.end <= end + 0.05 and w.text.strip())
     evidence: list[dict[str, Any]] = [{"dimension": "entertainment", "impact": 0.0, "time": round(start, 2),
                                        "quote": None, "text": "You picked this moment yourself."}]
+    caption, own_tags, cover = "", [], {}
     if pick is not None:
+        caption, own_tags, cover = pick.caption, pick.hashtags, _cover(pick)
         title = pick.title or (said[:60] if said else f"Moment at {_clock(start)}")
         hook = pick.hook or title
         hooks = [hook] + ([title] if title != hook else [])
@@ -506,6 +514,8 @@ def moment_highlight(words: list[Word], sentences: list[Sentence], audio: AudioF
         subscores=dict(full.subscores) if full is not None else {d: 50.0 for d in DIMENSIONS},
         confidence=confidence, explanation=f"You picked this moment. {reason}".strip(), evidence=evidence,
         category=category, title=title, hook_text=hook, hook_options=hooks,
-        hashtags=build_hashtags(category, options.preset, options.game_style, creator, f"{video_title} {said}"),
-        description=build_description(title, creator), transcript_text=said, rank=0, analysis_source="manual",
-        peak_time=round(full.peak_time if full is not None else start, 2), extra={"end_from": end_from, "moved": moved})
+        hashtags=merge_hashtags(own_tags, build_hashtags(category, options.preset, options.game_style, creator,
+                                                         f"{video_title} {said}")),
+        description=build_description(caption or title, creator), transcript_text=said, rank=0,
+        analysis_source="manual", peak_time=round(full.peak_time if full is not None else start, 2),
+        extra={"end_from": end_from, "moved": moved, **cover})

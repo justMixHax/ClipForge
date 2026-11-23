@@ -47,6 +47,17 @@ def test_verdicts_and_additions_are_read_even_with_text_around_them():
     assert [a.title for a in review.additions] == ["Loot run"]
 
 
+def test_a_moment_chatgpt_adds_comes_with_thumbnail_words_a_caption_and_hashtags():
+    review = chatgpt_review.parse_answer(review_text([], [
+        {"start": 12.0, "end": 24.0, "title": "Loot run", "category": "hype", "score": 70, "reason": "Fast.",
+         "thumb": "full loot in 10 seconds", "thumb_word": "10", "caption": "He was not meant to get away. #gta",
+         "hashtags": ["#lootrun"]}]))
+
+    (added,) = review.additions
+    assert (added.thumb, added.thumb_word) == ("FULL LOOT IN 10 SECONDS", "10")
+    assert added.caption == "He was not meant to get away." and added.hashtags == ["#lootrun", "#gta"]
+
+
 def test_odd_verdicts_and_broken_additions_are_ignored():
     review = chatgpt_review.parse_answer(review_text(
         [{"pick": 1, "verdict": "maybe"}, {"pick": "x", "verdict": "agree"}, {"pick": 3, "verdict": "AGREE"}],
@@ -115,6 +126,13 @@ def test_the_prompt_holds_the_transcript_and_the_numbered_picks():
     assert "1." in prompt and "Phone in his hand" in prompt and "2." in prompt and "Settings talk" in prompt
     assert "agree" in prompt and "disagree" in prompt and "additions" in prompt
     assert "never invent" in prompt.lower()
+
+
+def test_the_prompt_asks_for_thumbnail_words_a_caption_and_hashtags_with_each_addition():
+    prompt = chatgpt_review.build_prompt(SENTENCES, claude_picks(), OPTIONS, title="Friday stream", creator="Kai")
+
+    assert all(f'"{key}"' in prompt for key in ("thumb", "thumb_word", "caption", "hashtags"))
+    assert "thumbnail" in prompt and "TikTok caption" in prompt
 
 
 def test_the_command_is_read_only_ignores_your_settings_and_reads_the_prompt_from_input(tmp_path: Path):

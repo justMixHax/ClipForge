@@ -4,10 +4,10 @@ Run from the backend folder:   python -m app.serve
 scripts/start.ps1 does this. Keeping the address in one place (the settings) means the server cannot end
 up listening somewhere the safety checks do not know about.
 
-Stopping: Ctrl+C in the window it runs in, or scripts/stop.ps1 from anywhere. The script cannot press
-Ctrl+C in another window, so it leaves a file (data/server.stop) that this process watches for. Either
-way the server shuts down in order: it stops taking requests, then asks the worker to put its job back
-in the queue.
+Stopping: Ctrl+C in the window it runs in, the Shut down button in the app, or scripts/stop.ps1 from
+anywhere. The script cannot press Ctrl+C in another window, so it leaves a file (data/server.stop) that this
+process watches for; the button leaves the same file. Either way the server shuts down in order: it stops
+taking requests, then asks the worker to put its job back in the queue.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from .config import check_bind, get_settings
 
 STOP_FILE = "server.stop"
 STOP_GRACE_SECONDS = 4
+WATCHED: dict[str, Path] = {}  # the stop file this process watches for; set only when main() runs the server
 
 
 def server_options() -> dict[str, Any]:
@@ -42,6 +43,16 @@ def watch_for_stop(server: Any, stop_file: Path, poll: float = 0.5) -> None:
         time.sleep(poll)
 
 
+def request_stop() -> bool:
+    """Ask this server to shut down in order, the way scripts/stop.ps1 does. False when nothing watches for
+    that, because the server was not started by main()."""
+    stop_file = WATCHED.get("stop_file")
+    if stop_file is None:
+        return False
+    stop_file.write_text("stop", encoding="utf-8")
+    return True
+
+
 def main() -> None:
     import uvicorn
 
@@ -50,6 +61,9 @@ def main() -> None:
     settings.ensure_dirs()
     stop_file = settings.data_dir / STOP_FILE
     stop_file.unlink(missing_ok=True)  # a leftover from an earlier run must not stop this one
+    WATCHED["stop_file"] = stop_file
+    from . import serve as imported  # run as "python -m app.serve" this file is __main__; the app imports app.serve
+    imported.WATCHED["stop_file"] = stop_file
 
     server = uvicorn.Server(uvicorn.Config("app.main:create_app", **options))
     threading.Thread(target=watch_for_stop, args=(server, stop_file), name="stop-watch", daemon=True).start()

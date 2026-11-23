@@ -56,7 +56,11 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 One window runs the interface, the API and the worker that does the processing, and your browser opens at
 `http://localhost:3000`. Only this PC can reach it.
 
-- **Stop:** press Ctrl+C in that window, or from another terminal run
+- **Desktop shortcut:** `powershell -ExecutionPolicy Bypass -File scripts\shortcut.ps1` puts a **ClipForge**
+  shortcut on your desktop. Double-click it to start ClipForge in a minimised window and open it in the browser;
+  if it is already running, the shortcut just opens it.
+- **Stop:** press **Shut down ClipForge** at the bottom of the app's menu, press Ctrl+C in that window, or from
+  another terminal run
   `powershell -ExecutionPolicy Bypass -File scripts\stop.ps1`. A job that was running goes back in the queue and
   continues the next time you start.
 - `-Port 3100` uses another port for this run. `-NoBrowser` does not open the browser.
@@ -193,7 +197,7 @@ PC (no package caches) has not been tried.
 | Settings shows `cublas64_12.dll is not found` | Normal until step 6 is done. Speech-to-text uses the processor meanwhile |
 | A render fails on the graphics card | ClipForge retries that render on the processor by itself. Settings → Test again shows whether NVENC still passes |
 | A job seems stuck | Stages and progress are on the AI Clipper page. Cancel it there and press Retry; finished steps (audio, transcript) are reused |
-| The page says the app cannot be reached | The start window was closed. Run `scripts\start.ps1` again; nothing is lost |
+| The page says the app cannot be reached | The start window was closed, or ClipForge was shut down. Double-click **ClipForge** on your desktop (or run `scripts\start.ps1`); nothing is lost |
 | An import from a link fails with "could not be imported" | Run `scripts\update-downloader.ps1`, restart ClipForge, try again. If the message says the site asked for a sign-in, the video is not public: download it yourself and add the file |
 | A YouTube link fails but other sites work | Install Deno (`winget install DenoLand.Deno`) or Node.js 22 or newer, then restart ClipForge |
 | Something else | `data\logs\api.log` and `data\logs\worker.log` have the details. Error messages in the app include a reference you can search for |

@@ -23,9 +23,11 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 ```
 
-The second command opens `http://localhost:3000`. Press Ctrl+C in that window to stop, or run
-`scripts\stop.ps1` from anywhere. Details, options and troubleshooting are in
-[SETUP_WINDOWS.md](SETUP_WINDOWS.md).
+The second command opens `http://localhost:3000`. To start it without typing that again, run
+`scripts\shortcut.ps1` once: it puts a **ClipForge** shortcut on your desktop (double-click it to start ClipForge;
+if it is already running, it just opens it). To stop, press **Shut down ClipForge** at the bottom of the app's
+menu (a job that is running continues next time), Ctrl+C in the start window, or `scripts\stop.ps1` from
+anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_WINDOWS.md).
 
 ## Using it
 
@@ -46,14 +48,37 @@ The second command opens `http://localhost:3000`. Press Ctrl+C in that window to
    (what was said, how the voice changed, where the payoff lands) and a breakdown of twelve sub-scores.
    Approve, reject, favourite, reorder, or tell it what was wrong (the feedback shifts future ranking).
 5. **Edit.** Trim on a waveform timeline, fix any caption word, change the caption style, font, colours,
-   layout, shape and hook title, with undo and redo. Save and render again.
+   layout, shape and hook title, with undo and redo. Save and render again. To take the subtitles off a clip
+   (or put them back), use the **Subtitles** switch in the clip's window and press **Confirm and render again**;
+   the hook title keeps its own setting.
+
+   **Prompt edit.** Or just say what you want: press **Prompt edit** on a clip (or use the box in the clip's
+   window), describe the change in your own words, for example *start when he says "okay ladies", cut out the
+   part where he reads chat, bigger yellow subtitles one word at a time, change the hook to "Cop or criminal?"*,
+   and press **Change and render again**. Claude turns it into changes ClipForge can make: the cut, parts left
+   out of the middle, the subtitles (style, font, size, height, colours, capitals, words per line, masking, the
+   spelling of a word), the hook title, layout, shape, zoom, sound, title and thumbnail. Every value is checked
+   within the editor's own limits, a cut never falls inside a word, and the list of what changed is shown. What
+   ClipForge cannot do (music, sound effects, speed changes, stickers) is listed, never faked. **Undo this
+   prompt edit** puts the clip back as it was and renders it again. One Claude request per edit, on your own
+   plan. Parts left out are listed under the editor's timeline, where you can put each one back.
 6. **Download or export.** Download the MP4, SRT or VTT, or select clips in the Clip Library and export them
-   to a folder with a text file holding the title, description, hashtags, source and rights note.
+   to a folder with their thumbnails and a text file holding the title, TikTok caption, hashtags, source and
+   rights note.
 7. **Clip a moment yourself.** Found a good moment while watching? Under **3 · Clip a moment yourself**, type
    where it starts (`1:02:15`, `62:15`, or paste a YouTube link copied at that moment), or press **Watch and
    mark** and use **Start here** and **End here** in the player. Leave the end empty and Claude ends it right
    after the payoff. The same work as for the AI's picks follows: title, hook, score, ChatGPT's verdict,
    captions, render and checks. Your start is kept; only a start in the middle of a word moves to its edge.
+8. **Thumbnail and TikTok caption.** Every rendered clip gets a thumbnail: its best moment (sharp, well lit, a
+   face clearly visible), framed like the clip, with two to six big words on it and one of them in colour. The
+   words stay clear of faces and of the bottom, where TikTok puts its caption and buttons. When Claude picks a
+   clip it also writes those words, a TikTok caption and hashtags, from what is really said; otherwise the words
+   come from the title. In the clip's window or the editor's **Thumbnail** tab you can change the words, the
+   word in colour and the moment, download the picture and copy the caption. **Rewrite with Claude** writes a
+   new TikTok caption from what is said (with or without emojis, with or without hashtags; the credit stays), and
+   you can change it yourself and save it with the clip. Words in Arabic, Hebrew and
+   similar scripts are not drawn yet (they need text shaping this setup lacks): those thumbnails get no words.
 8. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
    developer app, then the platform's own sign-in; the page walks you through it). Then **New post**: pick
    approved clips, accounts, the text (Claude can suggest it) and now or a time. The **Calendar** shows what
@@ -66,7 +91,7 @@ and what does not yet**.
 
 | | |
 |---|---|
-| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
+| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
 | **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip, so a moving subject is not followed. |
 | **Needs setup** | Nothing on this PC. On another PC with an NVIDIA card, speech-to-text on the graphics card needs `scripts\enable-gpu.ps1` run once (about 1.3 GB); until then it runs on the processor. |
 | **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). |

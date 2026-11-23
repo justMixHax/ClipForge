@@ -3,13 +3,15 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, FileText, Film,
   Heart, MessageSquareWarning, Pencil, Play, RefreshCw, Trash2, X, XCircle,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Clip, Job, Options } from "../lib/api";
 import { api } from "../lib/api";
 import { FEEDBACK_LABELS, PERMISSION_LABELS, bytes, clock, confidenceLabel, cx, duration, scoreTone } from "../lib/format";
-import { usePatchClip, useRefreshAll } from "../lib/hooks";
-import { Badge, Button, Modal, Progress, useToast, type Tone } from "./ui";
+import { useClip, usePatchClip, useRefreshAll } from "../lib/hooks";
+import { PromptEditButton, PromptEditPanel } from "./promptedit";
+import { sourceTime, ThumbnailPanel, TikTokCaption } from "./thumbnail";
+import { Badge, Button, Modal, Progress, Switch, useToast, type Tone } from "./ui";
 
 // ------------------------------------------------------------------------------------------ score ring
 export function ScoreRing({ score, size = 64, manual = false }: { score: number; size?: number; manual?: boolean }) {
@@ -156,8 +158,8 @@ export function ClipThumb({ clip, job, onOpen, className }: { clip: Clip; job?: 
   const ratio = clip.out_width && clip.out_height ? clip.out_width / clip.out_height : 9 / 16;
   return (
     <button type="button" onClick={onOpen} className={cx("group relative block overflow-hidden rounded-xl border border-line bg-black", className)} style={{ aspectRatio: String(ratio) }} aria-label={`Preview ${clip.title}`}>
-      {clip.thumb_url ? (
-        <img src={clip.thumb_url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
+      {clip.cover_url || clip.thumb_url ? (
+        <img src={clip.cover_url || clip.thumb_url} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-faint">
           <Film className="h-6 w-6" />
@@ -242,6 +244,7 @@ export function ClipCard({
             <Button size="sm" variant={clip.review_status === "approved" ? "good" : "secondary"} onClick={() => actions.review(clip, "approved")}><Check className="h-4 w-4" />{clip.review_status === "approved" ? "Approved" : "Approve"}</Button>
             <Button size="sm" variant={clip.review_status === "rejected" ? "danger" : "secondary"} onClick={() => actions.review(clip, "rejected")}><X className="h-4 w-4" />{clip.review_status === "rejected" ? "Rejected" : "Reject"}</Button>
             <Link to={`/editor/${clip.id}`}><Button size="sm"><Pencil className="h-4 w-4" />Edit</Button></Link>
+            <PromptEditButton clip={clip} />
             {clip.render_status === "ready" ? (
               <a href={`/api/clips/${clip.id}/file?download=1`}><Button size="sm"><Download className="h-4 w-4" />Download</Button></a>
             ) : (
@@ -270,10 +273,51 @@ export function ClipCard({
   );
 }
 
+// ---------------------------------------------------------------------------- subtitles on or off
+/** Turn the burned-in subtitles on or off; the change is made by rendering the clip again once you confirm. */
+export function SubtitlesSwitch({ clip }: { clip: Clip }) {
+  const patch = usePatchClip();
+  const refresh = useRefreshAll();
+  const toast = useToast();
+  const saved = clip.settings.captions?.enabled !== false;
+  const [wanted, setWanted] = useState(saved);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setWanted(saved), [clip.id, saved]);
+  const rendering = clip.render_status === "queued" || clip.render_status === "rendering";
+  const confirm = async () => {
+    setBusy(true);
+    try {
+      await patch.mutateAsync({ id: clip.id, body: { settings: { captions: { enabled: wanted } } } });
+      await api.post<Job>(`/clips/${clip.id}/render`);
+      refresh();
+      toast({ tone: "neutral", title: wanted ? "Rendering again with subtitles" : "Rendering again without subtitles", body: clip.title });
+    } catch (error) {
+      toast({ tone: "bad", title: "Could not render again", body: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3 rounded-xl border border-line bg-bg/60 p-3">
+      <Switch checked={wanted} onChange={setWanted} disabled={rendering || busy} label="Subtitles"
+        hint={wanted ? "Burned into the video." : "Left out of the video. The SRT and VTT files are still made, and the hook title keeps its own setting."} />
+      {wanted !== saved && !rendering && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="primary" onClick={confirm} busy={busy}><RefreshCw className="h-4 w-4" />Confirm and render again</Button>
+          <Button size="sm" variant="ghost" onClick={() => setWanted(saved)} disabled={busy}>Cancel</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------------------- clip viewer
-export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | null; options?: Options; onClose: () => void; onPeek: (time: number) => void }) {
+export function ClipViewer({ clip: given, options, onClose, onPeek }: { clip: Clip | null; options?: Options; onClose: () => void; onPeek: (time: number) => void }) {
   const actions = useClipActions();
   const toast = useToast();
+  const player = useRef<HTMLVideoElement>(null);
+  const live = useClip(given?.id ?? null);  // the latest copy, so a render that finishes shows up here
+  const clip = live.data && live.data.id === given?.id ? live.data : given;
   if (!clip) return null;
   const manual = clip.analysis_source === "manual";
   const copyKit = async () => {
@@ -290,11 +334,11 @@ export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | nu
       <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
         <div>
           {clip.render_status === "ready" ? (
-            <video key={clip.file_url} src={clip.file_url} poster={clip.thumb_url} controls autoPlay playsInline className="mx-auto max-h-[70vh] w-full rounded-xl border border-line" />
+            <video ref={player} key={clip.file_url} src={clip.file_url} poster={clip.thumb_url} controls autoPlay playsInline className="mx-auto max-h-[70vh] w-full rounded-xl border border-line" />
           ) : (
             <div className="flex aspect-[9/16] w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line text-center text-muted">
               <Film className="h-8 w-8 text-faint" />
-              <p className="px-6 text-[13px]">{clip.render_status === "failed" ? `The last render failed: ${clip.render_error}` : "This clip has not been rendered yet."}</p>
+              <p className="px-6 text-[13px] [overflow-wrap:anywhere]">{clip.render_status === "failed" ? `The last render failed: ${clip.render_error}` : clip.render_status === "queued" || clip.render_status === "rendering" ? "Rendering… the new video shows here when it is done." : "This clip has not been rendered yet."}</p>
               <Button variant="primary" onClick={() => actions.render(clip)} disabled={clip.render_status === "queued" || clip.render_status === "rendering"}>
                 {clip.render_status === "queued" || clip.render_status === "rendering" ? "Rendering…" : "Render it"}
               </Button>
@@ -313,6 +357,7 @@ export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | nu
           {clip.render_status === "ready" && (
             <p className="mt-2 text-xs text-faint">{clip.out_width}×{clip.out_height} · {duration(clip.out_duration)} · {bytes(clip.file_size)}</p>
           )}
+          <SubtitlesSwitch clip={clip} />
         </div>
 
         <div className="min-w-0 space-y-5">
@@ -344,6 +389,10 @@ export function ClipViewer({ clip, options, onClose, onPeek }: { clip: Clip | nu
             <Button size="sm" onClick={() => actions.render(clip)}><RefreshCw className="h-4 w-4" />Render again</Button>
             <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete “${clip.title}” and its rendered file?`)) { actions.remove(clip); onClose(); } }}><Trash2 className="h-4 w-4" />Delete</Button>
           </div>
+
+          <PromptEditPanel clip={clip} />
+          <ThumbnailPanel clip={clip} frameTime={clip.render_status === "ready" ? () => (player.current ? sourceTime(clip, player.current.currentTime) : null) : undefined} />
+          <TikTokCaption clip={clip} />
 
           {!manual && (
             <div>

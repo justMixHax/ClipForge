@@ -6,10 +6,12 @@ from urllib.parse import quote
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..analysis.describe import cover_words, credit_line, post_caption
 from ..errors import NotFound
 from ..jobs import queue
 from ..models import Clip, Feedback, Job, Project, Video
 from ..schemas import ClipOut, JobOut, VideoOut
+from ..services import storage
 
 
 def content_disposition(filename: str) -> str:
@@ -72,8 +74,22 @@ def clip_out(session: Session, clip: Clip, video: Video | None = None) -> ClipOu
     if clip.file_path:
         out.file_url = f"/api/clips/{clip.id}/file?v={version}"
         out.thumb_url = f"/api/clips/{clip.id}/thumbnail?v={version}" if clip.thumb_path else ""
+    if clip.cover_path:
+        try:
+            made = storage.data_path(clip.cover_path).stat().st_mtime_ns // 1_000_000
+            out.cover_url = f"/api/clips/{clip.id}/cover?v={made}"
+        except OSError:
+            pass  # the file is gone: no thumbnail to show
+    if not clip.cover_text:
+        out.cover_text, out.cover_word = cover_words(clip.title)
     if video is not None:
         out.video_title, out.creator_name, out.permission_status = video.title, video.creator_name, video.permission_status
+        out.post_caption = post_caption(clip.description or clip.title,
+                                        credit_line(video.attribution, video.creator_name), clip.hashtags or [])
+    if clip.tiktok_caption:
+        out.post_caption = clip.tiktok_caption
+    # the clip as it was before the prompt edit stays here, for undo
+    out.last_edit = {k: v for k, v in clip.last_edit.items() if k != "before"} if clip.last_edit else None
     out.feedback = list(session.scalars(select(Feedback.label).where(Feedback.clip_id == clip.id)
                                         .order_by(Feedback.id)))
     return out

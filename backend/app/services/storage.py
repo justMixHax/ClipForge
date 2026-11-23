@@ -7,7 +7,9 @@ deleted by the app.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -81,6 +83,31 @@ def remove_tree(path: Path) -> int:
     freed = folder_size(target)
     shutil.rmtree(target, ignore_errors=True)
     return freed
+
+
+def replace_file(new: Path, target: Path, tries: int = 20) -> None:
+    """Put new in target's place. Windows refuses while the old file is open (being sent to the browser), which
+    for a picture takes a moment, so it is tried again for up to two seconds."""
+    for attempt in range(tries):
+        try:
+            os.replace(new, target)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(0.1)
+
+
+def place_file(new: Path, target: Path) -> Path:
+    """Put new in target's place and return where it went. A video playing in the browser can keep the old file
+    open for minutes, so that is not waited for: the new file then gets a name of its own next to it."""
+    try:
+        replace_file(new, target)
+        return target
+    except PermissionError:
+        own = target.with_name(f"{target.stem}-{uuid.uuid4().hex[:8]}{target.suffix}")
+        os.replace(new, own)
+        return own
 
 
 def remove_file(path: Path) -> None:

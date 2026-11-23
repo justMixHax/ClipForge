@@ -2,9 +2,11 @@
 speech model so the tests run in seconds."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from app import db
 from app.errors import DependencyMissing
@@ -117,6 +119,7 @@ def test_rendering_produces_the_video_cover_caption_files_and_quality_report(vid
     assert (folder / "captions.vtt").read_text(encoding="utf-8").startswith("WEBVTT")
     kit = (folder / "post.txt").read_text(encoding="utf-8")
     assert clip.title in kit and "Test Streamer" in kit and "#" in kit
+    assert "TIKTOK CAPTION" in kit
     assert clip.qc and all(c["status"] != "fail" for c in clip.qc), clip.qc
     assert clip.render_info["layout"] in ("fit_blur", "fill", "facecam_top", "split")
     assert clip.file_size == storage.data_path(clip.file_path).stat().st_size
@@ -186,6 +189,109 @@ def test_a_missing_speech_model_fails_with_instructions(video: Video, monkeypatc
 
     assert job.status == "failed"
     assert "No speech model is installed" in job.error and "Settings" in job.error
+
+
+def test_every_rendered_clip_gets_a_thumbnail_from_its_best_moment(video: Video, model: ScriptedModel):
+    analyze(video, auto_render=True, count=1)
+
+    job = run_next()
+
+    clip = clips_of(video)[0]
+    assert job.status == "succeeded", job.error
+    cover = storage.data_path(clip.cover_path)
+    assert cover.name == "thumbnail.jpg" and Image.open(cover).size == (1080, 1920)
+    assert clip.start <= clip.cover_time <= clip.end
+    assert clip.cover_text == ""                                      # nobody chose words: they come from the title
+    assert any(actor == "forge" and text.startswith("Made the thumbnail") for actor, text in lines(job))
+
+
+def test_a_thumbnail_that_cannot_be_made_never_costs_you_the_clip(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    analyze(video, auto_render=True, count=1)
+
+    def broken(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise RuntimeError("no picture today")
+
+    monkeypatch.setattr(pipeline, "make_cover", broken)
+    job = run_next()
+    clip = clips_of(video)[0]
+
+    assert job.status == "succeeded", job.error
+    assert clip.render_status == "ready" and clip.cover_path == "" and clip.cover_time is None
+    assert any(actor == "forge" and "thumbnail" in text and "again" in text for actor, text in lines(job))
+
+
+def test_a_title_the_fonts_cannot_draw_gives_a_thumbnail_without_words_and_the_log_says_so(video: Video,
+                                                                                           model: ScriptedModel):
+    analyze(video, count=1)
+    with db.session_scope() as s:
+        clip = s.query(Clip).filter(Clip.video_id == video.id).one()
+        clip.title = "مرحبا بالعالم"
+        pipeline.enqueue_render(s, clip)
+
+    job = run_next()
+
+    clip = clips_of(video)[0]
+    assert job.status == "succeeded", job.error
+    assert clip.cover_path and any("without words" in text for _, text in lines(job))
+
+
+def test_a_render_lands_even_while_the_old_video_is_open_in_the_browser(video: Video, model: ScriptedModel,
+                                                                        monkeypatch):  # noqa: ANN001
+    analyze(video, auto_render=True, count=1)
+    assert run_next().status == "succeeded"
+    with db.session_scope() as s:
+        pipeline.enqueue_render(s, s.query(Clip).filter(Clip.video_id == video.id).one())
+    real = os.replace
+
+    def held(src, dst):  # noqa: ANN001, ANN202  (Windows refuses to replace a video the browser is playing)
+        if Path(dst).name == "clip.mp4":
+            raise PermissionError(13, "Access is denied")
+        real(src, dst)
+
+    monkeypatch.setattr(os, "replace", held)
+    job = run_next()
+
+    clip = clips_of(video)[0]
+    assert job.status == "succeeded", job.error
+    assert clip.render_status == "ready" and Path(clip.file_path).name != "clip.mp4"
+    assert ffmpeg.probe(storage.data_path(clip.file_path)).duration > 1
+
+
+def switch_text(video: Video, *, subtitles: bool, hook: bool) -> None:  # noqa: F811
+    """What the clip window's switch does: change the setting, then render again."""
+    with db.session_scope() as s:
+        clip = s.query(Clip).filter(Clip.video_id == video.id).one()
+        clip.start, clip.end, clip.hook_text = 13.5, 30.0, "45 minutes for a phone"   # the story, with its words
+        clip.settings = {**clip.settings, "captions": {**(clip.settings.get("captions") or {}), "enabled": subtitles},
+                         "hook": {**(clip.settings.get("hook") or {}), "enabled": hook}}
+        pipeline.enqueue_render(s, clip)
+
+
+def test_subtitles_switched_off_are_left_out_but_the_hook_title_stays(video: Video, model: ScriptedModel):
+    analyze(video, count=1)
+    switch_text(video, subtitles=False, hook=True)
+
+    job = run_next()
+
+    clip = clips_of(video)[0]
+    folder = storage.data_path(clip.file_path).parent
+    script = (folder / "captions.ass").read_text(encoding="utf-8").lower()
+    assert job.status == "succeeded", job.error
+    assert "45 minutes for a phone" in script and "dumbest" not in script
+    assert "dumbest" in (folder / "captions.srt").read_text(encoding="utf-8").lower()  # the subtitle file stays
+
+
+def test_with_subtitles_and_hook_title_off_nothing_is_burned_in(video: Video, model: ScriptedModel):
+    analyze(video, auto_render=True, count=1)
+    assert run_next().status == "succeeded"                         # first with subtitles
+    switch_text(video, subtitles=False, hook=False)
+
+    job = run_next()
+
+    clip = clips_of(video)[0]
+    assert job.status == "succeeded", job.error
+    assert not (storage.data_path(clip.file_path).parent / "captions.ass").exists()  # the old script is gone too
+    assert not clip.render_info["captions"]
 
 
 def test_a_render_failure_is_recorded_on_both_the_clip_and_the_job(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
@@ -434,8 +540,9 @@ def test_a_render_logs_what_forge_did(video: Video, model: ScriptedModel):
 
     render = run_next()
 
-    (actor, text), = lines(render)
+    (actor, text), (_, thumbnail) = lines(render)
     assert actor == "forge" and text.startswith("Rendered “") and "checks passed" in text and "1080×1920" in text
+    assert thumbnail.startswith("Made the thumbnail") and "s into the clip" in thumbnail
 
 
 def test_a_failed_job_logs_where_it_stopped(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
@@ -535,3 +642,20 @@ def test_a_cancelled_job_keeps_the_lines_of_what_was_already_done(video: Video, 
     log = lines(job)
     assert log[0][0] == "forge" and log[0][1].startswith("Transcribed")
     assert log[-1] == ("forge", "Cancelled.")
+
+
+def test_parts_left_out_are_cut_from_the_rendered_clip(video: Video, model: ScriptedModel):
+    analyze(video, count=1)
+    clip = clips_of(video)[0]
+    middle = round((clip.start + clip.end) / 2, 3)
+    with db.session_scope() as s:
+        row = s.get(Clip, clip.id)
+        row.settings = {**row.settings, "cuts": [[middle - 1.5, middle + 1.5]]}
+        pipeline.enqueue_render(s, row)
+    job = run_next()
+    clip = clips_of(video)[0]
+
+    assert job.status == "succeeded", job.error
+    assert abs(clip.out_duration - (clip.end - clip.start - 3.0)) < 0.35
+    assert clip.render_info["segments"] == [[clip.start, round(middle - 1.5, 3)], [round(middle + 1.5, 3), clip.end]]
+    assert not middle - 1.5 < clip.cover_time < middle + 1.5            # nor is its thumbnail taken from them

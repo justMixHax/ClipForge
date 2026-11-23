@@ -95,6 +95,22 @@ def test_with_claude_on_it_ends_your_moment_after_the_payoff_and_names_it(video:
     assert any(actor == "claude" and "0:35" in text and "He lost his phone" in text for actor, text in lines(job))
 
 
+def test_claude_writes_the_thumbnail_words_and_tiktok_caption_of_your_moment_too(video: Video, model: ScriptedModel,  # noqa: F811
+                                                                               monkeypatch):  # noqa: ANN001
+    monkeypatch.setattr(claude_review, "ask_claude", lambda prompt, **kw: [
+        Pick(start=14.2, end=35.0, title="He lost his phone in his own hand", hook="45 minutes for a phone",
+             category="funny", score=88, reason="The payoff lands.", thumb="IT WAS IN HIS HAND", thumb_word="HAND",
+             caption="45 minutes looking for his phone.", hashtags=["#storytime"])])
+    claude_on()
+
+    job = moment(video, 14.2)
+
+    assert job.status == "succeeded", job.error
+    (clip,) = clips_of(video)
+    assert (clip.cover_text, clip.cover_word) == ("IT WAS IN HIS HAND", "HAND")
+    assert clip.description.startswith("45 minutes looking for his phone.") and clip.hashtags[0] == "#storytime"
+
+
 def test_an_end_you_give_is_kept_even_when_claude_would_end_it_elsewhere(video: Video, model: ScriptedModel,  # noqa: F811
                                                                         monkeypatch):  # noqa: ANN001
     asked: list[str] = []
