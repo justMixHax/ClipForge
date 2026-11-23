@@ -177,7 +177,8 @@ started sending transcripts to ChatGPT. All were fixed in the same change, each 
 of the fixed version found 11 narrower points; 10 were fixed the same way and one was declined with a reason
 (noted in the review file). A third review, of the publishing commit on 23 November, ran on gpt-5.6-terra
 because the ChatGPT plan no longer offered Astra that day; it found 3 real problems (1 serious), all fixed with
-tests.
+tests. Since then this PC is signed in to a ChatGPT Go account, which does not include Astra either: code reviews
+use gpt-5.6-terra (the script's default now) and ClipForge's second opinion uses gpt-6-luna.
 
 ## Defects the tests found
 

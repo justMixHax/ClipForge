@@ -12,7 +12,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\review.ps1 -Base main
   powershell -ExecutionPolicy Bypass -File scripts\review.ps1 -Commit 010cba1
 #>
-param([string]$Base = "", [string]$Commit = "", [string]$Model = "gpt-6.2-astra")
+param([string]$Base = "", [string]$Commit = "", [string]$Model = "gpt-5.6-terra")
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "common.ps1")
 
