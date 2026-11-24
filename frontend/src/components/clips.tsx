@@ -10,7 +10,7 @@ import { api } from "../lib/api";
 import { FEEDBACK_LABELS, PERMISSION_LABELS, bytes, clock, confidenceLabel, cx, duration, scoreTone } from "../lib/format";
 import { useClip, usePatchClip, useRefreshAll } from "../lib/hooks";
 import { PromptEditButton, PromptEditPanel } from "./promptedit";
-import { sourceTime, ThumbnailPanel, TikTokCaption } from "./thumbnail";
+import { sourceTime, ThumbnailPanel, TikTokCaption, YouTubeText } from "./thumbnail";
 import { Badge, Button, Modal, Progress, Switch, useToast, type Tone } from "./ui";
 
 // ------------------------------------------------------------------------------------------ score ring
@@ -393,6 +393,7 @@ export function ClipViewer({ clip: given, options, onClose, onPeek }: { clip: Cl
           <PromptEditPanel clip={clip} />
           <ThumbnailPanel clip={clip} frameTime={clip.render_status === "ready" ? () => (player.current ? sourceTime(clip, player.current.currentTime) : null) : undefined} />
           <TikTokCaption clip={clip} />
+          <YouTubeText clip={clip} />
 
           {!manual && (
             <div>

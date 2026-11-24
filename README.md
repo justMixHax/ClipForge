@@ -86,7 +86,9 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
    come from the title. In the clip's window or the editor's **Thumbnail** tab you can change the words, the
    word in colour and the moment, download the picture and copy the caption. **Rewrite with Claude** writes a
    new TikTok caption from what is said (with or without emojis, with or without hashtags; the credit stays), and
-   you can change it yourself and save it with the clip. Words in Arabic, Hebrew and
+   you can change it yourself and save it with the clip. **YouTube title and description** has Claude write a
+   Shorts title and a description (what happens, one more line, a question for the comments), with the credit on
+   its own line, then #Shorts and the hashtags; each box has Copy, and nothing is saved. Words in Arabic, Hebrew and
    similar scripts are not drawn yet (they need text shaping this setup lacks): those thumbnails get no words.
 8. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
    developer app, then the platform's own sign-in; the page walks you through it). Then **New post**: pick

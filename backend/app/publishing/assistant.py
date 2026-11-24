@@ -28,11 +28,19 @@ WHAT = {
 }
 
 
+# The YouTube Shorts text to copy into YouTube Studio: the credit and the hashtags are added by ClipForge.
+YOUTUBE_SHAPE = ("title: up to 70 characters, no hashtags, no < or >. caption: the YouTube description, on separate "
+                 "lines: what happens in the clip in one line, one short sentence more about the moment, then a short "
+                 "question that invites viewers to comment. Leave the credit line and hashtags out of it. No < or > "
+                 "anywhere.")
+
+
 def build_prompt(clip: Clip, video: Video | None, platform: str, *, emojis: bool | None = None,
-                 avoid: str = "") -> str:
+                 avoid: str = "", shape: str = "") -> str:
     """The request to Claude. emojis: whether the caption should have some (None: not said). avoid: a caption to
-    write a different one from."""
-    kind, shape = WHAT[platform]
+    write a different one from. shape: what to write, instead of the platform's usual."""
+    kind, usual = WHAT[platform]
+    shape = shape or usual
     style = ""
     if emojis is True:
         style += "\nUse one to three emojis in the caption that fit what happens."
@@ -124,3 +132,31 @@ def tiktok_caption(session: Session, clip_id: int, *, emojis: bool = True, hasht
     creator = [f"#{handle}"] if handle else []  # the creator's tag stays, however many Claude suggests
     tags = merge_hashtags(answer["hashtags"], [*creator, *(clip.hashtags or [])]) if hashtags else []
     return post_caption(words, credit, tags)
+
+
+def youtube_text(session: Session, clip_id: int, *, emojis: bool = True, hashtags: bool = True,
+                 avoid: str = "") -> dict[str, str]:
+    """A YouTube Shorts title and description by Claude, to copy into YouTube Studio: the title without hashtags;
+    the description's lines, the credit on a line of its own, then #Shorts and the hashtags if wanted. avoid: the
+    description in the box now, so a new one is different. Nothing is saved."""
+    clip, cfg = _clip_for_claude(session, clip_id)
+    video = session.get(Video, clip.video_id)
+    credit = credit_line(video.attribution, video.creator_name) if video is not None else ""
+    answer = _ask(build_prompt(clip, video, "youtube", emojis=emojis, avoid=avoid, shape=YOUTUBE_SHAPE), cfg)
+
+    def without_credit(text: str, joiner: str) -> str:  # the credit goes on a line of its own, wherever Claude put it
+        return re.sub(rf"\s*[-–—|•·:]?\s*{re.escape(credit)}\.?", joiner, text, flags=re.IGNORECASE) if credit else text
+
+    def clean(text: str) -> str:  # YouTube Studio refuses < and > in titles and descriptions
+        return tidy_caption(re.sub(r"[<>]", "", text), emojis=emojis)
+
+    title = clean(without_credit(answer["title"], " ")).replace("\n", " ") or " ".join(clip.title.split())
+    if len(title) > 100:
+        title = title[:99].rsplit(" ", 1)[0].rstrip(",;:-–— ") + "…"
+    parts = [clean(without_credit(answer["caption"] or answer["title"], "\n")), re.sub(r"[<>]", "", credit)]
+    if hashtags:
+        handle = re.sub(r"[^a-z0-9]", "", (video.creator_name if video is not None else "").lower())
+        creator = [f"#{handle}"] if handle else []
+        mine = [t for t in answer["hashtags"] if t.lower() != "#shorts"]  # #Shorts is always put first
+        parts.append(" ".join(["#Shorts", *merge_hashtags(mine, [*creator, *(clip.hashtags or [])])]))
+    return {"title": title, "description": "\n\n".join(part for part in parts if part)[:5000]}

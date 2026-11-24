@@ -227,7 +227,7 @@ All under `/api`. Interactive documentation is at `http://localhost:3000/api/doc
 | Area | Endpoints |
 |---|---|
 | Videos | upload (raw stream), check a link, import from a link, link from disk, list, read, update, delete, stream with seeking, thumbnail, analyze, transcript read and correct, timeline, make a clip by hand |
-| Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, still frame, thumbnail (see, download, make again with other words, another word in colour or another moment), TikTok caption rewritten by Claude (with or without emojis and hashtags; your own saved with the clip), prompt edit (your words → checked changes → rendered again) and its undo, caption words, SRT and VTT, post text, feedback |
+| Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, still frame, thumbnail (see, download, make again with other words, another word in colour or another moment), TikTok caption rewritten by Claude (with or without emojis and hashtags; your own saved with the clip), YouTube title and description written by Claude (not saved), prompt edit (your words → checked changes → rendered again) and its undo, caption words, SRT and VTT, post text, feedback |
 | Jobs | list, read, cancel, retry |
 | System | health, shut down (in order, as `stop.ps1` does), hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, your own presets (list, save under a name, remove; checked by the same rules as an analysis), speech-model install, dashboard, notifications, search, projects |
 

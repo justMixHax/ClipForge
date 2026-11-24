@@ -149,6 +149,88 @@ export function ThumbnailPanel({ clip, frameTime }: {
 
 type Choice = "with" | "without";
 
+/** A copy button for one box: shows "Copied" for a moment. */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({ tone: "bad", title: "Could not copy", body: "Select the text and copy it yourself." });
+    }
+  };
+  return (
+    <Button size="sm" variant="ghost" onClick={copy} disabled={!text.trim()} aria-label={`Copy the ${label}`}>
+      {copied ? <Check className="h-4 w-4 text-good" /> : <Copy className="h-4 w-4" />}{copied ? "Copied" : "Copy"}
+    </Button>
+  );
+}
+
+/** A YouTube Shorts title and description, written by Claude on request, to copy into YouTube Studio. Not saved. */
+export function YouTubeText({ clip }: { clip: Clip }) {
+  const toast = useToast();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [emojis, setEmojis] = useState<Choice>("with");
+  const [tags, setTags] = useState<Choice>("with");
+  const [writing, setWriting] = useState(false);
+  useEffect(() => { setTitle(""); setDescription(""); }, [clip.id]);
+
+  const write = async () => {
+    setWriting(true);
+    try {
+      const answer = await api.post<{ title: string; description: string }>(`/clips/${clip.id}/youtube-text`,
+        { emojis: emojis === "with", hashtags: tags === "with", avoid: description.slice(0, 5000) });
+      setTitle(answer.title);
+      setDescription(answer.description);
+    } catch (error) {
+      toast({ tone: "bad", title: "Claude could not write the YouTube text", body: (error as Error).message });
+    } finally {
+      setWriting(false);
+    }
+  };
+
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-faint">YouTube title and description</p>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Segmented value={emojis} onChange={setEmojis}
+          options={[{ value: "with", label: "With emojis" }, { value: "without", label: "No emojis" }]} />
+        <Segmented value={tags} onChange={setTags}
+          options={[{ value: "with", label: "With hashtags" }, { value: "without", label: "No hashtags" }]} />
+        <Button size="sm" onClick={write} busy={writing} title="Claude writes a title and description from what is said in the clip, with the credit and #Shorts">
+          {!writing && <Sparkles className="h-4 w-4" />}{writing ? "Claude is writing…" : description ? "Write another" : "Write with Claude"}
+        </Button>
+      </div>
+      {description || title ? (
+        <div className="space-y-2">
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[12.5px] text-muted">Title <span className="text-faint">({title.length}/100)</span></span>
+              <CopyButton text={title} label="title" />
+            </div>
+            <Input value={title} maxLength={100} onChange={(event) => setTitle(event.target.value)} aria-label="YouTube title" />
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[12.5px] text-muted">Description</span>
+              <CopyButton text={description} label="description" />
+            </div>
+            <Textarea rows={7} value={description} maxLength={5000} onChange={(event) => setDescription(event.target.value)}
+              aria-label="YouTube description" className="text-[13px]" />
+          </div>
+          <p className="text-xs text-faint">Not saved: change it if you like, then copy it into YouTube Studio.</p>
+        </div>
+      ) : (
+        <p className="text-xs text-faint">A title and a description from what is said in the clip, with the credit, #Shorts and hashtags.</p>
+      )}
+    </div>
+  );
+}
+
 /** The caption to paste into TikTok: Claude rewrites it on request, and you can change it and save it. */
 export function TikTokCaption({ clip }: { clip: Clip }) {
   const toast = useToast();

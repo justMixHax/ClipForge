@@ -174,6 +174,12 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
         *_publishing(session),
         _item("manual_export", "Publishing", "Manual export with post text", "working",
               "Download a clip or export to a folder with title, description, hashtags and source details."),
+        _item("youtube_text", "Publishing", "YouTube title and description by Claude",
+              "working" if claude_review.find_cli() else "needs_setup",
+              "A Shorts title and a description from what is said in the clip, with the credit, #Shorts and "
+              "hashtags, with or without emojis. Copy them into YouTube Studio; they are not saved."
+              if claude_review.find_cli() else
+              "Needs the Claude Code command-line tool on this PC, signed in to your Claude plan."),
         _item("tiktok_caption", "Publishing", "TikTok caption rewritten by Claude",
               "working" if claude_review.find_cli() else "needs_setup",
               "A new caption from what is said in the clip, with or without emojis and hashtags; the credit stays. "

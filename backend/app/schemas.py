@@ -320,6 +320,12 @@ class TikTokCaptionIn(Strict):
     hashtags: bool = True
 
 
+class YouTubeTextIn(Strict):
+    emojis: bool = True
+    hashtags: bool = True
+    avoid: str = Field("", max_length=5000)  # the description in the box now: the new one is different
+
+
 class PromptEditIn(Strict):
     instruction: str = Field(min_length=1, max_length=1000)  # what you want changed, in your own words
 

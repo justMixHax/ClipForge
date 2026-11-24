@@ -29,7 +29,7 @@ from ..errors import ClipForgeError, Conflict, MediaError, NotFound
 from ..jobs import pipeline, queue
 from ..models import Clip, Feedback, Job, TranscriptSegment, Video
 from ..schemas import (BatchIn, ClipList, ClipOut, ClipPatch, CoverIn, ExportIn, FeedbackIn, JobOut, PromptEditIn,
-                       PromptEditOut, ReorderIn, TikTokCaptionIn)
+                       PromptEditOut, ReorderIn, TikTokCaptionIn, YouTubeTextIn)
 from ..security.paths import safe_filename
 from ..services import ffmpeg, hardware, settings_store, storage
 from .common import clip_out, content_disposition, get_clip, get_video, job_out
@@ -372,6 +372,15 @@ def rewrite_tiktok_caption(clip_id: int, body: TikTokCaptionIn, session: Session
     from ..publishing import assistant  # loaded only when asked for
 
     return {"caption": assistant.tiktok_caption(session, clip_id, emojis=body.emojis, hashtags=body.hashtags)}
+
+
+@router.post("/{clip_id}/youtube-text")
+def write_youtube_text(clip_id: int, body: YouTubeTextIn, session: Session = Depends(get_db)) -> dict:
+    """Claude writes a YouTube Shorts title and description for the clip, to copy into YouTube Studio. Nothing
+    is saved."""
+    from ..publishing import assistant  # loaded only when asked for
+
+    return assistant.youtube_text(session, clip_id, emojis=body.emojis, hashtags=body.hashtags, avoid=body.avoid)
 
 
 _RENDERING = ("queued", "rendering")

@@ -7,7 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { ClipThumb, ScoreRing } from "../components/clips";
 import { JobStages } from "../components/JobStages";
 import { describePart, PartsPicker } from "../components/partspicker";
-import { ThumbnailPanel, TikTokCaption } from "../components/thumbnail";
+import { ThumbnailPanel, TikTokCaption, YouTubeText } from "../components/thumbnail";
 import { snapTime, Timeline, type TimedWord } from "../components/Timeline";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, NumberField, Segmented, Select, Spinner, Switch, Textarea, useToast } from "../components/ui";
 import { api, query, type CaptionPreset, type CaptionSettings, type CaptionWord, type Clip, type ClipSettings, type Options, type Segment, type Timeline as TimelineData, type Video } from "../lib/api";
@@ -733,6 +733,7 @@ export default function Editor() {
             <div className="space-y-5">
               <ThumbnailPanel clip={c} frameTime={() => time} />
               <TikTokCaption clip={c} />
+              <YouTubeText clip={c} />
             </div>
           )}
           {tab === "details" && <DetailsPanel draft={draft} clip={c} setField={setField} />}
