@@ -269,6 +269,10 @@ function LayoutPanel({ draft, options, reason, setSettings, video, time }: { dra
               <input type="range" min={0} max={1} step={0.01} value={s.subject_x ?? 0.5} onChange={(event) => setSettings({ subject_x: Number(event.target.value), layout: "fill" })} className="w-full" />
             </Field>
           )}
+          {s.subject_x === null && (
+            <Switch checked={Boolean(s.follow)} onChange={(value) => setSettings({ follow: value })} label="Follow the person"
+              hint="The camera moves with them when they move, slowly, like a tripod. Seen in the render, not in the live preview." />
+          )}
           <Field label={`Zoom: ${(s.zoom || 1).toFixed(2)}×`}>
             <input type="range" min={1} max={2.5} step={0.05} value={s.zoom || 1} onChange={(event) => setSettings({ zoom: Number(event.target.value) })} className="w-full" />
           </Field>

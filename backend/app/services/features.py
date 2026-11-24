@@ -126,8 +126,9 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
               else "No NVIDIA graphics card was found, so video is encoded on the processor (x264)."),
         _item("face_reframe", "Editing", "Face-aware reframing and facecam detection",
               "needs_setup" if not detector_available() else "working",
-              "Face detector installed. Crops are fixed per clip; they do not yet follow a moving subject. "
-              "Validated on synthetic tests only so far, so check the framing on real footage."
+              "Face detector installed. Crops stand still unless you switch on Follow the person (Layout tab, "
+              "cropped layout): then the camera pans with them, sideways. The moving crop is tested with real "
+              "renders, but not yet on a clip where someone really walks, so check the framing."
               if detector_available() else "The YuNet face detector model is missing; run scripts\\setup.ps1. "
                                            "Without it clips use the whole-frame layout."),
         _item("captions", "Editing", "Caption styles, emphasis, SRT and VTT", "working",

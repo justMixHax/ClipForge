@@ -494,3 +494,10 @@ def test_settings_can_list_the_chatgpt_models_your_plan_offers(client: TestClien
         {"slug": "gpt-5.6-terra", "visibility": "list"}]}), encoding="utf-8")
 
     assert client.get("/api/system/ai/chatgpt-models").json() == {"offered": ["gpt-6-luna", "gpt-5.6-terra"]}
+
+
+def test_following_the_person_is_a_switch_on_the_clip(client: TestClient, clip: dict):
+    on = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"follow": True}})
+
+    assert on.status_code == 200 and on.json()["settings"]["follow"] is True
+    assert client.patch(f"/api/clips/{clip['id']}", json={"settings": {"follow": "yes"}}).status_code == 400

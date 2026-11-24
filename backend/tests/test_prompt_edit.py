@@ -591,3 +591,21 @@ def test_parts_left_out_are_stored_with_the_clip_and_checked(client: TestClient,
     assert ok.status_code == 200 and ok.json()["settings"]["cuts"] == [[1.0, 1.5]]
     assert client.patch(f"/api/clips/{clip['id']}", json={"settings": {"cuts": [[1.5, 1.0]]}}).status_code == 400
     assert client.patch(f"/api/clips/{clip['id']}", json={"settings": {"cuts": "everything"}}).status_code == 400
+
+
+def test_the_camera_can_be_told_to_follow_the_person_and_to_stand_still_again():
+    on = change({"layout": {"follow": True}})
+
+    assert on.state["settings"]["follow"] is True and "follows the person" in on.done[0]
+    off = prompt_edit.make_changes(on.state, {"layout": {"follow": False}}, duration=600.0, words=WORDS, fonts=FONTS)
+    assert off.state["settings"]["follow"] is False and off.done == ["The camera stands still"]
+    assert change({"layout": {"follow": "sometimes"}}).not_done == ["Following the person is either on or off."]
+
+
+def test_following_is_not_claimed_where_the_render_would_not_do_it():
+    placed = change({"layout": {"subject_x": 0.3, "follow": True}})
+    stacked = change({"layout": {"layout": "Whole frame on blur", "follow": True}})
+
+    assert not placed.state["settings"].get("follow") and "placed" in placed.not_done[0]
+    assert not stacked.state["settings"].get("follow") and "cropped layout" in stacked.not_done[0]
+    assert not any("follows" in line for line in placed.done + stacked.done)

@@ -38,7 +38,8 @@ router = APIRouter(prefix="/clips", tags=["clips"])
 log = logging.getLogger("clipforge.api.clips")
 NESTED = ("captions", "hook", "audio")
 TOP_LEVEL = {"aspect", "layout", "subject_x", "subject_y", "zoom", "facecam_box", "gameplay_box", "captions", "hook",
-             "audio", "remove_silence", "silence_threshold", "quality", "fps", "preset", "game_style", "cuts"}
+             "audio", "remove_silence", "silence_threshold", "quality", "fps", "preset", "game_style", "cuts",
+             "follow"}
 
 
 def _cuts_ok(value: Any) -> bool:
@@ -83,6 +84,8 @@ def merge_settings(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
         fail("Zoom must be between 1 and 3")
     if not _box_ok(merged.get("facecam_box")) or not _box_ok(merged.get("gameplay_box")):
         fail("A box must be four numbers: x, y, width, height")
+    if not isinstance(merged.get("follow", False), bool):
+        fail("Following the person is either on or off")
     if not _cuts_ok(merged.get("cuts")):
         fail("Parts to leave out must be pairs of times in seconds: from, to")
     if merged.get("quality", "balanced") not in hardware.QUALITIES:

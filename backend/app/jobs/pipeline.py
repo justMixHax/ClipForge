@@ -35,6 +35,7 @@ from ..analysis.visual import VisualFeatures, compute_visual_features
 from ..config import get_settings
 from ..editing.captions import (CaptionWord, build_ass, build_srt, build_vtt, mark_emphasis, resolve_style,
                                 words_for_clip)
+from ..editing.follow import follow_path
 from ..editing.qc import run_checks, summarize
 from ..editing.reframe import ASPECTS, LAYOUTS, FaceSummary, analyze_faces, plan_layout
 from ..editing.render import RenderRequest, render_clip
@@ -844,7 +845,9 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     manual = st.get("subject_x") is not None or bool(st.get("facecam_box"))
     chosen_parts = bool(st.get("facecam_box") and st.get("gameplay_box"))
     needs_faces = (layout == "auto" or (layout == "split" and not chosen_parts)
-                   or (layout in ("fill", "facecam_top") and not manual))
+                   or (layout in ("fill", "facecam_top") and not manual)
+                   # following the person needs to know who, even with parts left over from another layout
+                   or (layout == "fill" and bool(st.get("follow")) and st.get("subject_x") is None))
     faces = (analyze_faces(source, clip.start, clip.end - clip.start, video.width, video.height,
                            should_cancel=ctx.cancelled) if needs_faces else FaceSummary())
     plan = plan_layout(video.width, video.height, aspect, layout, faces, subject_x=st.get("subject_x"),
@@ -852,6 +855,23 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                        facecam_box=tuple(st["facecam_box"]) if st.get("facecam_box") else None,
                        gameplay_box=tuple(st["gameplay_box"]) if st.get("gameplay_box") else None,
                        preset=str(st.get("preset") or "auto"))
+    if st.get("follow") and plan.layout == "fill" and plan.crop and plan.crop[2] < video.width:
+        # the camera moves with the person instead of standing still (not when you placed the subject yourself)
+        if st.get("subject_x") is not None:
+            plan.reason += " The camera stands still where you placed it."
+        elif not faces.face or faces.mode == "two":
+            plan.reason += (" Two people share the frame, so the camera stands still." if faces.mode == "two"
+                            else " No face was found to follow, so the camera stands still.")
+        else:
+            track = follow_path(source, clip.start, clip.end - clip.start, video.width, video.height,
+                                main=faces.face, crop_w=plan.crop[2], should_cancel=ctx.cancelled)
+            moves = sum(1 for a, b in zip(track, track[1:]) if a[1] != b[1])
+            if moves:
+                plan.track = track
+                plan.crop = (track[0][1], *plan.crop[1:])
+                plan.reason += f" The camera follows the person: {moves} move{'s' if moves != 1 else ''}."
+            else:
+                plan.reason += " The person stays in the middle of the frame, so the camera stands still."
     ctx.note(plan.reason)
 
     ctx.start("captions")

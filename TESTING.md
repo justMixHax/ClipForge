@@ -25,8 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 24 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 966 passed,
-0 failed, 0 skipped, in 6 minutes 45 seconds.
+**Last full run:** 24 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 1004 passed,
+0 failed, 0 skipped, in 6 minutes 54 seconds.
 
 ## How the tests are built
 

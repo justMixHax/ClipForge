@@ -134,6 +134,12 @@ export function LinkImport({ analyzeBody, onImported }: {
               <button type="button" className="text-accent-soft hover:underline" onClick={() => onImported(found.existing_video_id as number)}>Open it</button>
             </p>
           )}
+          {found.width && found.height && Math.min(found.width, found.height) < 700 && (
+            <p className="text-xs text-warn" role="note">
+              Low quality: this download is only {found.width}×{found.height}. Clips are enlarged to 1080 pixels wide, so they will look soft.
+              {found.height < quality ? " The site offers nothing sharper for this video." : " Choose a higher quality below if the site has one."}
+            </p>
+          )}
           {found.over_limit && (
             <ErrorNote error={new Error(`About ${bytes(found.approx_bytes ?? 0)} at this quality, over the ${found.limit_gb} GB limit for imports. Choose a lower quality.`)} />
           )}

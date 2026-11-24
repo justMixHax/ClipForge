@@ -249,7 +249,8 @@ works today.
 | Rule-based scoring first, language model later | Works offline with no subscription, every score is explainable and testable | It does not understand meaning; sarcasm, in-jokes and visual-only moments are missed |
 | SQLite queue and one worker | Nothing extra to install, survives restarts | No parallel jobs; one long transcription delays renders behind it |
 | Captions as subtitle text | Editable, fast, exact timing | Limited to what the subtitle renderer can draw: no animated emoji or per-letter effects |
-| Fixed crop per clip | Predictable, no wobble | A subject who moves across the frame can leave the crop |
+| Fixed crop per clip, unless you switch on **Follow the person** | Predictable, no wobble | A subject who moves across the frame can leave a fixed crop |
+| The following camera is a few points in time, moved by FFmpeg in the same render (`editing/follow.py`; the "heavy tripod" idea is from OpenShorts, MIT) | One render, no second pass; a stray detection never moves the frame, because a move must be seen three times in a row | Sideways only; the person is watched four times a second, so it reacts in about a second, on purpose; the live preview does not show it |
 | Link imports ask for your right to clip first, and never sign in | A public video is not automatically yours to repost; cookies and logins would hand a downloader your accounts | Private, members-only and age-restricted videos cannot be imported from a link; you add those as files |
 | Built interface served by the API | One address, one command, no CORS setup | Interface changes need a rebuild (or `start.ps1 -Dev`) |
 

@@ -503,7 +503,7 @@ def _frame(out: Outcome, changes: dict[str, Any], frame: tuple[int, int] | None 
         out.not_done.append("The layout changes could not be read.")
         return
     for key in raw:
-        if key not in ("shape", "layout", "zoom", "subject_x", "top", "bottom"):
+        if key not in ("shape", "layout", "zoom", "subject_x", "top", "bottom", "follow"):
             out.not_done.append(f"The layout's “{_shown(key)}” cannot be changed in ClipForge yet.")
     st = out.state["settings"]
     # Parts of the picture for the stacked layouts (top: facecam_box, bottom: gameplay_box). If one is wrong, the
@@ -581,6 +581,20 @@ def _frame(out: Outcome, changes: dict[str, Any], frame: tuple[int, int] | None 
             if st.get("layout", "auto") == "auto":
                 st["layout"] = "fill"  # as in the editor: a chosen subject means cropping to it
             out.done.append(f"Keeps {round(x * 100)}% from the left in frame")
+    if "follow" in raw:
+        want = raw["follow"]
+        if not isinstance(want, bool):
+            out.not_done.append("Following the person is either on or off.")
+        elif want and st.get("subject_x") is not None:  # the render would leave it where it was placed
+            out.not_done.append("The camera can only follow the person when it finds them itself, and here the "
+                                "person in frame was placed by hand, so it stands still.")
+        elif want and st.get("layout", "auto") not in ("fill", "auto"):
+            out.not_done.append("The camera can only follow the person in the cropped layout (Crop to subject), "
+                                "so it stands still.")
+        elif want != bool(st.get("follow")):
+            st["follow"] = want
+            out.done.append("The camera follows the person as they move (in the cropped layout)" if want
+                            else "The camera stands still")
 
 
 def _sound(out: Outcome, changes: dict[str, Any], defaults: dict[str, Any]) -> None:
@@ -868,7 +882,8 @@ def build_prompt(instruction: str, state: dict[str, Any], *, video_title: str, c
         f"animation {style.animation}; box {yes(style.box)}; swear words masked {yes(style.censor)}.",
         f"- Layout: shape {st.get('aspect', '9:16')}; layout {layout} ({LAYOUT_LABELS[layout]}); zoom "
         f"{float(st.get('zoom') or 1.0):g}; person in frame "
-        + ("found automatically" if subject is None else f"at {subject:.2f} from the left") + ".",
+        + ("found automatically" if subject is None else f"at {subject:.2f} from the left")
+        + f"; camera follows the person: {yes(st.get('follow'))}.",
         f"- Sound: volume levelled {yes(audio.get('normalize', defaults['normalize']))}; background noise reduced "
         f"{yes(audio.get('denoise', False))}.",
         f'- Thumbnail words: "{state.get("cover_text") or "(made from the title)"}"; picture from '
@@ -924,7 +939,8 @@ What you can change (leave out everything that should stay as it is):
   false), "seconds" (how long it shows, 1 to 15).
 - "layout": an object with any of: "shape" ({", ".join(ASPECTS)}); "layout" ({layouts}); "zoom" (1 to 2.5, for the
   cropped layouts); "subject_x" (0 to 1: where the person to keep in frame is, from the left; null: found
-  automatically).{parts}
+  automatically); "follow" (true or false: the camera moves with the person when they move, in the layout "fill"
+  only and only when "subject_x" is null).{parts}
 - "sound": an object with any of: "level_volume" (true or false), "reduce_noise" (true or false).
 - "title": the clip's title.
 - "thumbnail": an object with any of: "text" (2 to 6 words on the thumbnail), "word" (one of those words, shown in

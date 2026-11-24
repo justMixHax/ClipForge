@@ -194,3 +194,32 @@ def test_a_picture_that_is_being_sent_to_the_browser_is_replaced_once_it_is_free
     storage.replace_file(tmp_path / "new.jpg", tmp_path / "thumbnail.jpg")
 
     assert (tmp_path / "thumbnail.jpg").read_bytes() == b"new" and len(calls) == 3
+
+
+@pytest.mark.ffmpeg
+def test_with_a_camera_that_follows_the_frame_is_taken_where_the_camera_is_then(tmp_path: Path):
+    video = tmp_path / "v.mp4"
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-t", "4", "-i", "color=c=black:s=320x360:r=30",
+                    "-f", "lavfi", "-t", "4", "-i", "color=c=white:s=320x360:r=30",
+                    "-filter_complex", "[0:v][1:v]hstack=inputs=2[v]", "-map", "[v]",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(video)],
+                   check=True, capture_output=True)
+    moving = {**FILL, "crop": [0, 0, 202, 360], "track": [[0.0, 0], [1.0, 0], [3.0, 438]]}
+
+    early = np.asarray(Image.open(compose_frame(video, 0.5, moving, tmp_path / "a.png")).convert("L"))
+    late = np.asarray(Image.open(compose_frame(video, 3.5, moving, tmp_path / "b.png")).convert("L"))
+
+    assert early.mean() < 20 and late.mean() > 235
+
+
+def test_the_part_scored_for_the_best_moment_is_where_the_following_camera_is_then():
+    frame = np.zeros((90, 160, 3), dtype=np.uint8)
+    frame[:, 80:] = 255                                              # left half dark, right half light
+    moving = {"layout": "fill", "crop": [0, 0, 320, 360], "track": [[0.0, 0], [2.0, 320]]}
+
+    early = thumbnail._visible(frame, moving, (640, 360), 0.0)
+    late = thumbnail._visible(frame, moving, (640, 360), 2.0)
+
+    assert early.mean() == 0 and late.mean() == 255
+    assert thumbnail._visible(frame, {**moving, "track": None}, (640, 360), 2.0).mean() == 0   # no path: as before

@@ -659,3 +659,70 @@ def test_parts_left_out_are_cut_from_the_rendered_clip(video: Video, model: Scri
     assert abs(clip.out_duration - (clip.end - clip.start - 3.0)) < 0.35
     assert clip.render_info["segments"] == [[clip.start, round(middle - 1.5, 3)], [round(middle + 1.5, 3), clip.end]]
     assert not middle - 1.5 < clip.cover_time < middle + 1.5            # nor is its thumbnail taken from them
+
+
+def test_with_follow_on_the_render_uses_a_camera_that_moves_with_the_person(video: Video, model: ScriptedModel,
+                                                                          monkeypatch):  # noqa: ANN001
+    from app.editing.reframe import FaceSummary
+
+    analyze(video, count=1)
+    clip = clips_of(video)[0]
+    face = (video.width * 0.3, video.height * 0.3, video.width * 0.2, video.height * 0.3)
+    monkeypatch.setattr(pipeline, "analyze_faces",
+                        lambda *a, **k: FaceSummary(mode="cam", face=face, frames=10, frames_with_face=10, detector="yunet"))
+    asked = {}
+
+    def path(source, start, duration, w, h, *, main, crop_w, should_cancel=None):  # noqa: ANN001, ANN202
+        asked.update(start=start, main=main, crop_w=crop_w)
+        return [(start, 0), (start + 1.0, 0), (start + 2.0, w - crop_w)]
+
+    monkeypatch.setattr(pipeline, "follow_path", path)
+    with db.session_scope() as s:
+        row = s.get(Clip, clip.id)
+        row.settings = {**row.settings, "layout": "fill", "follow": True}
+        pipeline.enqueue_render(s, row)
+    job = run_next()
+    clip = clips_of(video)[0]
+
+    assert job.status == "succeeded", job.error
+    plan = clip.render_info["plan"]
+    assert plan["track"] == [[clip.start, 0], [clip.start + 1.0, 0], [clip.start + 2.0, video.width - plan["crop"][2]]]
+    assert asked["main"] == face and asked["crop_w"] == plan["crop"][2] and plan["crop"][0] == 0
+    assert "follows the person: 1 move." in plan["reason"]
+
+
+def test_with_follow_off_nothing_looks_for_a_path(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    analyze(video, count=1)
+    clip = clips_of(video)[0]
+    monkeypatch.setattr(pipeline, "follow_path", lambda *a, **k: pytest.fail("a path was asked for"))
+    with db.session_scope() as s:
+        row = s.get(Clip, clip.id)
+        row.settings = {**row.settings, "layout": "fill"}
+        pipeline.enqueue_render(s, row)
+
+    assert run_next().status == "succeeded" and "track" not in clips_of(video)[0].render_info["plan"]
+
+
+def test_follow_looks_for_the_person_even_when_parts_were_once_chosen_for_another_layout(
+        video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.editing.reframe import FaceSummary
+
+    analyze(video, count=1)
+    clip = clips_of(video)[0]
+    looked = []
+    face = (video.width * 0.3, video.height * 0.3, video.width * 0.2, video.height * 0.3)
+
+    def faces(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        looked.append(1)
+        return FaceSummary(mode="cam", face=face, frames=10, frames_with_face=10, detector="yunet")
+
+    monkeypatch.setattr(pipeline, "analyze_faces", faces)
+    monkeypatch.setattr(pipeline, "follow_path", lambda source, start, *a, **k: [(start, 0)])
+    with db.session_scope() as s:
+        row = s.get(Clip, clip.id)
+        row.settings = {**row.settings, "layout": "fill", "follow": True, "facecam_box": [0, 0, 100, 100],
+                        "gameplay_box": [100, 0, 100, 100]}
+        pipeline.enqueue_render(s, row)
+
+    assert run_next().status == "succeeded" and looked
+    assert "stays in the middle" in clips_of(video)[0].render_info["plan"]["reason"]

@@ -193,6 +193,8 @@ export interface ClipSettings {
   layout: string;
   subject_x: number | null;
   subject_y?: number | null;
+  /** Cropped layout: the camera moves with the person instead of standing still. */
+  follow?: boolean;
   zoom: number;
   facecam_box: number[] | null;
   gameplay_box: number[] | null;

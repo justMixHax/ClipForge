@@ -18,6 +18,7 @@ from ..errors import ClipForgeError
 from ..services import ffmpeg
 from ..services.hardware import encoder_args
 from .fonts import pick_font
+from .follow import clip_points
 from .reframe import ReframePlan, build_filter
 
 SEEK_MARGIN = 2.0  # seconds decoded before the first segment so the cut itself is frame-accurate
@@ -95,11 +96,13 @@ def build_graph(req: RenderRequest) -> tuple[str, float, float]:
             parts.append(f"[vs{k}]trim=start={start - seek:.3f}:duration={end - start:.3f},setpts=PTS-STARTPTS[vt{k}]")
         parts.append("".join(f"[vt{k}]" for k in range(n)) + f"concat=n={n}:v=1:a=0,fps={req.fps}[vin]")
 
+    # A camera that follows the person: its path, kept in source time, in the time of the clip as it is cut.
+    points = clip_points(req.plan.track, req.segments) if req.plan.track else None
     if req.ass_text:
-        parts.append(build_filter(req.plan, "[vin]", "[base]"))
+        parts.append(build_filter(req.plan, "[vin]", "[base]", points))
         parts.append("[base]subtitles=f=captions.ass:fontsdir=fonts[v]")
     else:
-        parts.append(build_filter(req.plan, "[vin]", "[v]"))
+        parts.append(build_filter(req.plan, "[vin]", "[v]", points))
 
     if req.has_audio:
         # A mono recording is copied to both speakers at its original level. Left to itself FFmpeg lowers

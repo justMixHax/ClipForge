@@ -14,7 +14,7 @@ without the model file every clip still renders, using layouts that need no face
 from __future__ import annotations
 
 import statistics
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,11 +74,13 @@ class ReframePlan:
     caption_y: float = 0.70                    # suggested vertical centre of the captions (share of height)
     hook_y: float = 0.16                       # suggested vertical centre of the hook title
     reason: str = ""
+    track: list[tuple[float, int]] | None = None  # fill, following the person: (source time, crop x) points
 
     def as_dict(self) -> dict[str, Any]:
         return {"layout": self.layout, "out_w": self.out_w, "out_h": self.out_h, "crop": self.crop, "fg": self.fg,
                 "top": self.top, "bottom": self.bottom, "caption_y": round(self.caption_y, 3),
-                "hook_y": round(self.hook_y, 3), "reason": self.reason}
+                "hook_y": round(self.hook_y, 3), "reason": self.reason,
+                **({"track": [[t, x] for t, x in self.track]} if self.track else {})}
 
 
 # ------------------------------------------------------------------------------------------- geometry
@@ -297,11 +299,18 @@ def plan_layout(src_w: int, src_h: int, aspect: str, layout: str, faces: FaceSum
     return plan
 
 
-def build_filter(plan: ReframePlan, source: str = "[vin]", out: str = "[base]") -> str:
-    """The FFmpeg filter chain that produces the output picture (before captions) from the source."""
+def build_filter(plan: ReframePlan, source: str = "[vin]", out: str = "[base]",
+                 points: Sequence[Sequence[float]] | None = None) -> str:
+    """The FFmpeg filter chain that produces the output picture (before captions) from the source. points: for
+    the cropped layout, where the crop's left edge is at which time of the clip (a camera that follows the
+    person, see follow.py); without them the crop stands still."""
     w, h = plan.out_w, plan.out_h
     if plan.layout == "fill":
         x, y, cw, ch = plan.crop
+        if points and len(points) > 1:
+            from .follow import crop_x_expression  # follow.py builds on this module
+
+            x = crop_x_expression(points)
         return f"{source}crop={cw}:{ch}:{x}:{y},scale={w}:{h}:flags=lanczos,setsar=1{out}"
     if plan.layout == "fit_blur":
         fx, fy, fw, fh = plan.fg

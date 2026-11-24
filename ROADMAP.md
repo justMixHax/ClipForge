@@ -47,12 +47,16 @@ marked done because the code merely exists.
 | Prompt edit | ✅ | Describe a change in your own words; Claude turns it into checked changes (cut, parts left out, subtitles and word spellings, hook title, layout, sound, title, thumbnail), the clip is rendered again and one press undoes it. What ClipForge cannot do (music, sound effects, speed) is said, never faked |
 | Clips from your own timestamps | ✅ | A start typed, marked in the player or pasted as a link with `?t=`; an optional end. Claude ends it after the payoff and names it (or the local rules do), ChatGPT gives its verdict, then captions, render and checks. A start or end inside a word moves to its edge |
 | Thumbnails | ✅ | One per clip, made with every render: the best moment framed like the clip, two to six big words with one in colour, clear of faces and of TikTok's buttons. Claude writes the words with a TikTok caption and hashtags; you can change words, colour and moment, download it, and it goes into exports |
-| Cropping and reframing | 🟡 | Four layouts, subject position, zoom, facecam box, automatic face finding, and a split screen of two parts you draw on the picture (or Claude chooses from it in a prompt edit, fitted to the cameras' edges). The crop is fixed for the clip, so a camera that moves or disappears for a while is not followed |
+| Cropping and reframing | 🟡 | Four layouts, subject position, zoom, facecam box, automatic face finding, and a split screen of two parts you draw on the picture (or Claude chooses from it in a prompt edit, fitted to the cameras' edges). In the stacked layouts the parts are fixed for the clip, so a camera that moves or disappears for a while is not followed; the cropped layout can follow the person (below) |
 | Editing presets | ✅ | Six built-in workflows and four content presets, and your own: save the AI Clipper's options under a name, use them again, remove them |
 | Batch processing | ✅ | Batch approve, reject, render, export, delete; several videos queue up |
 | Quality checks | ✅ | Eight checks after every render |
 | Who-is-speaking detection | ⬜ | |
-| Crops that follow a moving subject | ⬜ | |
+| Crops that follow a moving subject | 🟡 | **Follow the person** in the editor's Layout tab (or ask in a prompt edit), for the cropped layout: the camera stands still while they are near the middle, pans over steadily when they have really moved, and ignores a detection that jumps for a moment. Sideways only. The moving crop is tested with real renders; the tracking ran on real clips whose streamer sat still (no move, correctly), so a clip where someone really walks is still to be watched. Idea from OpenShorts (MIT) |
+| Zoom pushes on the big moments | ⬜ | Noted from OpenShorts: a short push of at most 12% on at most three beats a minute |
+| Leave ClipForge's subtitles off when the source already has them burned in | ⬜ | Noted from OpenShorts: asked once per video from a few stills. Today: switch subtitles off per clip, or say so in a prompt edit |
+| What Twitch viewers clipped, as a hint for the picker | ⬜ | Noted from OpenShorts: Twitch's official API lists viewers' clips of a recording with their place in it; needs your own free Twitch app keys |
+| Three or four people tiled from one wide shot | ⬜ | Noted from OpenShorts |
 
 ## Milestone 4 · YouTube discovery and automation — started
 
@@ -118,7 +122,8 @@ need publishing or analytics show a dash.
    three action scenes (scores 55 to 56, low confidence). It still needs trying on real gameplay.
 3. ~~Check the framing on real footage.~~ **Checked on 23 November 2026** on four real streams: the camera
    panel was right; under it, three showed the stream's own facecam a second time. Fixed: the gameplay is slid
-   away from it, or cut just above it, when that costs little. Next there: crops that follow a moving subject.
+   away from it, or cut just above it, when that costs little. ~~Next there: crops that follow a moving subject.~~
+   **Built on 24 November 2026** (Follow the person); still to be watched on a clip where someone walks.
 4. ~~Verify speech-to-text on the graphics card.~~ **Done on 22 November 2026.** Next there: try a larger speech
    model, which the graphics card makes practical (`large-v3-turbo`, a 1.6 GB download from Settings).
 5. ~~Add an AI review of the candidates.~~ **Done on 22 November 2026, with Claude as the main engine**

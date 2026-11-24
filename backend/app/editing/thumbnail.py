@@ -247,12 +247,19 @@ def frame_score(frame_bgr: np.ndarray, detector: Any) -> float:
     return 0.4 * sharp + 0.15 * light + 0.15 * contrast + 0.3 * face
 
 
-def _visible(frame: np.ndarray, plan: dict[str, Any] | None, src_size: tuple[int, int]) -> np.ndarray:
-    """The part of a small frame that the clip shows (the crop of a filled frame; all of it otherwise)."""
+def _visible(frame: np.ndarray, plan: dict[str, Any] | None, src_size: tuple[int, int],
+             moment: float | None = None) -> np.ndarray:
+    """The part of a small frame that the clip shows (the crop of a filled frame; all of it otherwise). With a
+    camera that follows the person, the crop is where the camera is at that moment of the source."""
     if not plan or plan.get("layout") != "fill" or not plan.get("crop"):
         return frame
     scale = frame.shape[1] / max(1, src_size[0])
-    x, y, w, h = (int(round(v * scale)) for v in plan["crop"])
+    crop = list(plan["crop"])
+    if plan.get("track") and moment is not None:
+        from .follow import position_at
+
+        crop[0] = position_at(plan["track"], moment)
+    x, y, w, h = (int(round(v * scale)) for v in crop)
     part = frame[max(0, y):y + max(2, h), max(0, x):x + max(2, w)]
     return part if part.size else frame
 
@@ -274,12 +281,12 @@ def pick_moment(video: Path, start: float, end: float, plan: dict[str, Any] | No
     best_time, best_score = lo, -1.0
     for k, frame in enumerate(ffmpeg.iter_frames(video, fps=fps, width=width, height=height, pix_fmt="bgr24",
                                                  start=lo, duration=hi - lo, should_cancel=should_cancel)):
-        part = _visible(frame, plan, src_size)
+        moment = lo + k / fps
+        part = _visible(frame, plan, src_size, moment)
         if detector is None:
             detector = _detector(part.shape[1], part.shape[0])
         if detector is not None:
             detector.setInputSize((part.shape[1], part.shape[0]))
-        moment = lo + k / fps
         if inside and not any(a <= moment <= b for a, b in inside):
             continue
         score = frame_score(part, detector)
@@ -303,7 +310,12 @@ def _plan(plan: dict[str, Any]) -> ReframePlan:
 
 def compose_frame(video: Path, moment: float, plan: dict[str, Any], out_path: Path) -> Path:
     """The clip's picture at this source time, framed like the clip, without captions."""
-    graph = build_filter(_plan(plan), source="[0:v]", out="[v]")
+    framed = _plan(plan)
+    if plan.get("track") and framed.layout == "fill" and framed.crop:  # where the following camera is just then
+        from .follow import position_at
+
+        framed.crop = (position_at(plan["track"], moment), *framed.crop[1:])
+    graph = build_filter(framed, source="[0:v]", out="[v]")
     cmd = [get_settings().ffmpeg_path, "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
            "-ss", f"{max(0.0, moment):.3f}", "-i", str(video), "-filter_complex", graph, "-map", "[v]",
            "-frames:v", "1", str(out_path)]

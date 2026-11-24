@@ -268,3 +268,39 @@ def test_the_chosen_frame_rate_is_what_comes_out(tmp_path: Path, fps: int):
 
     assert info.fps == pytest.approx(fps, abs=0.1)
     assert info.duration == pytest.approx(2.0, abs=0.12)
+
+
+# ---------------------------------------------------------------------------- a camera that follows the person
+def left_dark_right_light(path: Path) -> Path:
+    """Six seconds, 640x360: the left half black, the right half white."""
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+           "-f", "lavfi", "-t", "6", "-i", "color=c=black:s=320x360:r=30",
+           "-f", "lavfi", "-t", "6", "-i", "color=c=white:s=320x360:r=30",
+           "-filter_complex", "[0:v][1:v]hstack=inputs=2[v]", "-map", "[v]",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(path)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return path
+
+
+def test_the_crop_moves_along_the_cameras_path_during_the_render(tmp_path: Path):
+    source = left_dark_right_light(tmp_path / "src.mp4")
+    req = request(source, tmp_path, [(0.0, 6.0)])
+    width = req.plan.crop[2]
+    req.plan.track = [(0.0, 0), (2.0, 0), (4.0, 640 - width)]       # holds on the left, then pans to the right
+
+    result = render_clip(req)
+
+    assert "clip((t-2)/2" in result.filter_graph
+    assert frame_at(result.path, 1.0).mean() < 20                    # still on the dark half
+    assert 60 < frame_at(result.path, 3.0).mean() < 200              # half way across
+    assert frame_at(result.path, 5.0).mean() > 235                   # arrived on the light half
+
+
+def test_with_a_part_left_out_the_camera_is_where_the_picture_is(tmp_path: Path):
+    source = left_dark_right_light(tmp_path / "src.mp4")
+    req = request(source, tmp_path, [(0.0, 1.0), (5.0, 6.0)])       # the whole pan is cut out
+    req.plan.track = [(0.0, 0), (2.0, 0), (4.0, 640 - req.plan.crop[2])]
+
+    result = render_clip(req)
+
+    assert frame_at(result.path, 0.5).mean() < 20 and frame_at(result.path, 1.5).mean() > 235

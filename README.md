@@ -34,7 +34,8 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
 1. **AI Clipper → 1 · Source video.** Three ways to bring a video in:
    - drop a file (MP4, MOV, MKV, WebM, M4V) or choose one;
    - **paste a link** to a public video (YouTube, Twitch and Kick recordings, and most video sites), press
-     **Check link**, say why you may clip it, and press **Import video**;
+     **Check link**, say why you may clip it, and press **Import video** (a download smaller than 700 pixels
+     on its short side gets a warning first: it will look soft once enlarged);
    - paste the path of a recording that is already on this PC (it is linked, not copied).
 
    Record who made it and whether you are allowed to clip it, and put it in a project if you want to group
@@ -103,11 +104,11 @@ and what does not yet**.
 | | |
 |---|---|
 | **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor, with parts left out of the middle · **your own presets** · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
-| **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip, so a moving subject is not followed. |
+| **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip unless you switch on **Follow the person** (editor → Layout, cropped layout, or ask in a prompt edit): then the camera pans sideways with them, like a heavy tripod. That is new on 24 November 2026: the moving crop is tested with real renders, but it has not yet been watched on a clip where someone really walks. |
 | **Needs setup** | Nothing on this PC. On another PC with an NVIDIA card, speech-to-text on the graphics card needs `scripts\enable-gpu.ps1` run once (about 1.3 GB); until then it runs on the processor. |
 | **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). |
 | **Blocked by a third party** | TikTok direct posting: TikTok's rules for it exclude tools for posting to your own accounts. Drafts work instead. |
-| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · crops that follow a moving subject |
+| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · zoom pushes on big moments · a check for subtitles already burned into the source · hints from what Twitch viewers clipped |
 
 The full plan is in [ROADMAP.md](ROADMAP.md).
 
