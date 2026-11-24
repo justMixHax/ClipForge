@@ -22,7 +22,7 @@ from ..errors import JobCancelled
 from ..transcription.sentences import Sentence, Word
 from .audio import AudioFeatures, _smooth
 from .candidates import WindowOptions, enumerate_windows
-from .dedupe import ExistingClip, select_distinct, time_overlap
+from .dedupe import ExistingClip, select_distinct
 from .describe import build_description, build_hashtags, build_hooks, build_title, merge_hashtags
 from .feedback import FeedbackProfile
 from .presets import DIMENSIONS, effective_weights

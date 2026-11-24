@@ -1,11 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Cpu, Download, HardDrive, KeyRound, RefreshCw, SlidersHorizontal, Sparkles, XCircle } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, ErrorNote, Field, Input, Segmented, Select, Spinner, Switch, useToast } from "../components/ui";
 import { api, type HardwareReport, type Options, type SettingsBody, type StorageUsage } from "../lib/api";
 import { bytes } from "../lib/format";
 import { useFeatures, useHardware, useOptions, useSettings } from "../lib/hooks";
 import { useQuery } from "@tanstack/react-query";
+import { SecretField } from "../components/secret";
 import { FeatureRow } from "./Planned";
 
 function Tested({ ok, children }: { ok: boolean; children: ReactNode }) {
@@ -102,34 +104,6 @@ function ModelsCard({ options }: { options: Options }) {
         ))}
       </ul>
     </Card>
-  );
-}
-
-function SecretField({ name, label, stored, onSaved }: { name: string; label: string; stored: boolean; onSaved: () => void }) {
-  const [value, setValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const toast = useToast();
-  const save = async (next: string) => {
-    setBusy(true);
-    try {
-      await api.put("/settings/secret", { name, value: next });
-      setValue("");
-      onSaved();
-      toast({ tone: "good", title: next ? "Key stored (encrypted)" : "Key removed" });
-    } catch (e) {
-      toast({ tone: "bad", title: "Could not save the key", body: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Field label={label} hint={stored ? "A key is stored. It is encrypted on this PC and is never shown again." : "Not set."}>
-      <div className="flex gap-2">
-        <Input type="password" autoComplete="off" value={value} onChange={(event) => setValue(event.target.value)} placeholder={stored ? "••••••••  (stored)" : "Paste the key"} />
-        <Button onClick={() => save(value)} busy={busy} disabled={!value.trim()}>Save</Button>
-        {stored && <Button variant="ghost" onClick={() => save("")} disabled={busy}>Remove</Button>}
-      </div>
-    </Field>
   );
 }
 
@@ -344,7 +318,7 @@ export default function SettingsPage() {
             </div>
             <SecretField name="llm.openai_api_key" label="OpenAI API key" stored={Boolean(settings.data?.secrets["llm.openai_api_key"])} onSaved={() => settings.refetch()} />
             <SecretField name="llm.anthropic_api_key" label="Anthropic API key" stored={Boolean(settings.data?.secrets["llm.anthropic_api_key"])} onSaved={() => settings.refetch()} />
-            <SecretField name="youtube.api_key" label="YouTube Data API key (for the planned Creator Discovery)" stored={Boolean(settings.data?.secrets["youtube.api_key"])} onSaved={() => settings.refetch()} />
+            <p className="text-xs text-faint">The YouTube Data API key is not here: it is in use, and you set it under <Link to="/discovery" className="text-accent-soft hover:underline">Creator Discovery</Link>.</p>
           </div>
         </Card>
 

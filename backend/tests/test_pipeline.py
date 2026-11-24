@@ -726,3 +726,109 @@ def test_follow_looks_for_the_person_even_when_parts_were_once_chosen_for_anothe
 
     assert run_next().status == "succeeded" and looked
     assert "stays in the middle" in clips_of(video)[0].render_info["plan"]["reason"]
+
+
+# ------------------------------------------------------------ moments viewers pointed at (Creator Discovery)
+def found_through_discovery(video: Video, moments: list[dict]) -> None:
+    """Make the test video one that was imported from YouTube after Creator Discovery read its comments."""
+    from app.models import Creator, CreatorVideo
+
+    with db.session_scope() as s:
+        row = s.get(Video, video.id)
+        row.source_type, row.source_url = "url", "https://www.youtube.com/watch?v=stream00001"
+        creator = Creator(platform="youtube", external_id="UCjiXtODGCCulmhwypZAWSag", title="Test Streamer")
+        s.add(creator)
+        s.flush()
+        s.add(CreatorVideo(creator_id=creator.id, external_id="stream00001", title="Test stream", duration=40.0,
+                           signals={"checked": 50, "laughing": 20, "moments": moments,
+                                    "fetched_at": "2026-11-24T12:00:00+00:00"}))
+
+
+POINTED = [{"t": 20.0, "mentions": 4, "likes": 900, "laughing": True, "text": "0:20 the phone story"},
+           {"t": 5.0, "mentions": 1, "likes": 2, "laughing": False, "text": "0:05 intro"}]
+
+
+def test_moments_viewers_wrote_in_the_comments_reach_claude_and_show_on_the_clip(video: Video, model: ScriptedModel,
+                                                                                 monkeypatch):  # noqa: ANN001
+    from app.analysis import claude_review
+    from app.analysis.claude_review import Pick
+
+    found_through_discovery(video, POINTED)
+    asked: list[str] = []
+
+    def fake_claude(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        asked.append(prompt)
+        return [Pick(start=14.0, end=35.0, title="He lost his phone in his own hand", hook="45 minutes for a phone",
+                     category="funny", score=91, reason="A full story with a punchline.")]
+
+    monkeypatch.setattr(claude_review, "ask_claude", fake_claude)
+    claude_on()
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    assert "- 0:20 (4 comments, 900 likes, laughing): \"0:20 the phone story\"" in asked[0]
+    assert "- 0:05 (1 comment, 2 likes)" in asked[0]
+    (clip,) = clips_of(video)
+    assert [e for e in clip.evidence if e["dimension"] == "viewers"] == [
+        {"dimension": "viewers", "impact": 0.0, "time": 20.0, "quote": "0:20 the phone story",
+         "text": "Viewers point at this moment in the comments (4 comments, 900 likes)"}]   # 0:05 is not in the clip
+    assert any("where viewers" in line["text"] and "0:20" in line["text"] for line in job.result["log"])
+
+
+def test_with_the_local_rules_a_moment_viewers_pointed_at_still_shows_on_the_clip(video: Video, model: ScriptedModel):
+    found_through_discovery(video, POINTED)
+
+    assert analyze(video).status == "succeeded"
+
+    top = clips_of(video)[0]
+    assert [e["time"] for e in top.evidence if e["dimension"] == "viewers"] == [20.0]
+
+
+def test_what_was_kept_of_the_comments_in_a_shape_nobody_expects_is_no_hint_and_no_harm(video: Video,
+                                                                                         model: ScriptedModel):
+    found_through_discovery(video, POINTED)
+    with db.session_scope() as s:
+        from app.models import CreatorVideo
+
+        s.query(CreatorVideo).one().signals = ["not", "what", "ClipForge", "writes"]
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    assert all(e["dimension"] != "viewers" for clip in clips_of(video) for e in clip.evidence)
+
+
+def test_hints_that_cannot_be_read_at_all_never_cost_you_the_clips(video: Video, model: ScriptedModel,
+                                                                   monkeypatch):  # noqa: ANN001
+    found_through_discovery(video, POINTED)
+
+    def broken(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202  (a fault put in on purpose)
+        raise RuntimeError("the comments could not be read")
+
+    monkeypatch.setattr(pipeline, "viewer_moments", broken)
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video)                              # the clips are there, simply without that hint
+
+
+def test_a_video_that_was_not_found_through_discovery_has_no_viewer_hints(video: Video, model: ScriptedModel,
+                                                                          monkeypatch):  # noqa: ANN001
+    from app.analysis import claude_review
+    from app.analysis.claude_review import Pick
+
+    asked: list[str] = []
+
+    def fake_claude(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        asked.append(prompt)
+        return [Pick(start=14.0, end=35.0, title="Phone", hook="Phone", category="funny", score=91, reason="Story.")]
+
+    monkeypatch.setattr(claude_review, "ask_claude", fake_claude)
+    claude_on()
+
+    assert analyze(video).status == "succeeded"
+
+    assert "Viewers" not in asked[0]
+    assert not [e for c in clips_of(video) for e in c.evidence if e["dimension"] == "viewers"]

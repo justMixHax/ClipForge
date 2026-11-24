@@ -1,19 +1,32 @@
 # ClipForge AI
 
-A personal clipping studio that runs on your own Windows PC. You give it a long video; it transcribes it,
-finds the moments most likely to work as short clips, explains why it picked each one, and renders them as
-vertical videos with burned-in captions. You review, edit, approve and download them in the browser at
-`http://localhost:3000`.
+A clipping studio that runs on your own Windows PC. You give it a long video, or follow the channels you clip
+from; it transcribes the video, finds the moments most likely to work as short clips, explains why it picked
+each one, and renders them as vertical videos with burned-in captions and a thumbnail. You review, edit,
+approve and download them in the browser at `http://localhost:3000`.
 
-Everything essential runs locally with open-source software: no subscription, no account, and nothing is
-uploaded anywhere. The foundation, the AI clipping and most of the editing (milestones 1, 2 and most of 3 in
-[ROADMAP.md](ROADMAP.md)) are built and tested. Publishing, discovery and analytics are not built yet, and the
-app says so wherever they would appear.
+**It uses the Claude you already have.** With [Claude Code](https://claude.com/claude-code) installed and signed
+in, Claude picks the clips, makes the edits you describe in your own words and writes the post text, through
+your own Claude plan: no API key, no extra bill. ChatGPT can give a second opinion the same way, through the
+Codex tool of the ChatGPT app. Without either, ClipForge still works: its own rules pick the clips, and no
+transcript leaves the PC.
+
+Your videos stay on your PC. When Claude picks, it gets the transcript, not the video; a prompt edit also shows
+it two still pictures of that clip. A clip is uploaded only when you publish it yourself. There is no account,
+no telemetry and no update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network and
+when.
+
+**Status.** Built and tested by one person on one PC, with more than 1,100 automated tests. Clipping, editing
+and thumbnails are used on real streams. Publishing and Creator Discovery are built and tested against local
+stand-ins of the platforms' APIs; they need your own accounts and key before their first real request, and the
+app says so wherever that matters. The list under [What works](#what-works-and-what-does-not) is kept honest.
 
 ## Quick start
 
 You need 64-bit Windows 10 or 11, [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) (`winget install Gyan.FFmpeg`),
-Python 3.12 (or [uv](https://docs.astral.sh/uv/)) and Node.js. Then, from the project folder:
+Python 3.12 (or [uv](https://docs.astral.sh/uv/)) and Node.js. For Claude as the clip picker, install
+[Claude Code](https://claude.com/claude-code) and sign in once (`claude auth login` in a terminal); ClipForge
+finds it by itself ([SETUP_WINDOWS.md](SETUP_WINDOWS.md), step 8). Then, from the project folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
@@ -91,24 +104,35 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
    Shorts title and a description (what happens, one more line, a question for the comments), with the credit on
    its own line, then #Shorts and the hashtags; each box has Copy, and nothing is saved. Words in Arabic, Hebrew and
    similar scripts are not drawn yet (they need text shaping this setup lacks): those thumbnails get no words.
-8. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
+9. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
    developer app, then the platform's own sign-in; the page walks you through it). Then **New post**: pick
    approved clips, accounts, the text (Claude can suggest it) and now or a time. The **Calendar** shows what
    goes out when. A post reads Published only once the platform has confirmed it.
+10. **Follow the channels you clip from.** **Creator Discovery** uses YouTube's official API with a free key
+    of your own (the page shows the four steps). Paste a channel's link or @handle and press **Follow**. For
+    each of its new videos ClipForge shows what YouTube's public data says: how its views compare with the
+    channel's usual, how many of its top comments are laughing, and the moments viewers wrote down in the
+    comments ("12:34 😂"). Sort by any of those, then press **Import and find clips** on the ones worth it.
+    Record once whether you may clip that creator; without that record, the import asks every time. Claude is
+    told the moments viewers pointed at, as hints, and a clip that holds one says so in its evidence. Followed
+    channels are looked at again every six hours while ClipForge runs (you choose how often, or never), and
+    the page shows how much of YouTube's free daily quota that used. Once a video is in your library, the
+    page shows how its clips scored, and **Its funny clips** opens them in the Clip Library, which can filter
+    by the kind of moment.
 
 ## What works, and what does not
 
-Checked on this PC on 22 November 2026. The same list, live, is in the app under **Settings → What works,
-and what does not yet**.
+Checked on the author's PC (Windows 11, an RTX 3060) on 24 November 2026. The same list, live and for your
+own PC, is in the app under **Settings → What works, and what does not yet**.
 
 | | |
 |---|---|
 | **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor, with parts left out of the middle · **your own presets** · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
 | **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip unless you switch on **Follow the person** (editor → Layout, cropped layout, or ask in a prompt edit): then the camera pans sideways with them, like a heavy tripod. That is new on 24 November 2026: the moving crop is tested with real renders, but it has not yet been watched on a clip where someone really walks. |
-| **Needs setup** | Nothing on this PC. On another PC with an NVIDIA card, speech-to-text on the graphics card needs `scripts\enable-gpu.ps1` run once (about 1.3 GB); until then it runs on the processor. |
-| **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). |
+| **Needs setup** | Speech-to-text on the graphics card: on a PC with an NVIDIA card, run `scripts\enable-gpu.ps1` once (about 1.3 GB); until then it runs on the processor. Claude and ChatGPT: the Claude Code tool and the ChatGPT app's Codex tool, each signed in; without them the local rules pick the clips. |
+| **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). **Creator Discovery**: follow YouTube channels, see their new videos with what the public numbers and top comments say, import the ones you may clip. Built and tested against a stand-in of the YouTube Data API made from its documentation and from the real API's own refusals; it needs your own free API key before its first real request. |
 | **Blocked by a third party** | TikTok direct posting: TikTok's rules for it exclude tools for posting to your own accounts. Drafts work instead. |
-| **Planned, not built** | Creator discovery and watchlists · analytics · AI strategist · automation rules · who-is-speaking detection · zoom pushes on big moments · a check for subtitles already burned into the source · hints from what Twitch viewers clipped |
+| **Planned, not built** | Analytics · AI strategist · automation rules (Creator Discovery finds the videos; you still choose which to import) · who-is-speaking detection · zoom pushes on big moments · a check for subtitles already burned into the source · hints from what Twitch viewers clipped |
 
 The full plan is in [ROADMAP.md](ROADMAP.md).
 
@@ -128,9 +152,12 @@ Where almost nothing is said (gameplay between bits of commentary, action scenes
 are offered as well. They only fill places the spoken moments left free, never cut a sentence in half, and
 are marked "Low confidence" with the note that they rest on sound and picture only.
 
-Confidence is capped at 74% because no language model reviews the candidates yet, and the rules have been
-tuned on a synthetic test video and unit tests, not on a large set of real streams. Expect to disagree with
-it sometimes; that is what the feedback buttons and manual ranking are for.
+When Claude picks the clips, the score is Claude's own honest 0–100 for the moment, the twelve parts are still
+measured by the rules, and the reason is Claude's. The confidence shown is fixed by where the pick came from,
+not measured: 80% for Claude's picks, 70% for the ones ChatGPT adds, at most 74% for the local rules (they were
+tuned on a synthetic test video and unit tests, not on a large set of real streams) and at most 45% for moments
+found from sound and picture alone. Expect to disagree sometimes; that is what the feedback buttons and manual
+ranking are for.
 
 ## Where things are
 
@@ -140,12 +167,13 @@ frontend/    Browser interface (React, TypeScript, Vite, Tailwind)
 scripts/     setup, start, stop, test, optional fonts, optional GPU libraries, sample video builder
 data/        Everything the app creates: your videos, clips, the database, models, logs (not in Git)
 samples/     Synthetic sample video and the script it was built from, used by the slow tests
-docs/        Research notes on the three reference projects
+docs/        Research notes on the reference projects
+reviews/     The code reviews made before each commit, with what was done about every finding
 ```
 
 Moving the project folder moves everything, because the database stores paths relative to `data/`. The one
-exception is the Python environment, which lives in `%LOCALAPPDATA%\ClipForge\venv` when the project path is
-long (Windows cannot load libraries from very long paths); `.venv-path` records where it is.
+exception is the Python environment: it lives in `backend\.venv`, or in `%USERPROFILE%\.clipforge\venv` when
+the project path is long (Windows cannot load libraries from very long paths); `.venv-path` records where it is.
 
 ## Documentation
 
@@ -154,7 +182,9 @@ long (Windows cannot load libraries from very long paths); `.venv-path` records 
 - [TESTING.md](TESTING.md): what is tested, how to run it, and what is not covered
 - [SECURITY.md](SECURITY.md): what protects your PC, your files and your future credentials
 - [ROADMAP.md](ROADMAP.md): milestones, what is next, known limitations
-- [docs/RESEARCH.md](docs/RESEARCH.md): what was learned from clipping.net, GTA 6 Clipper and Clipify
+- [CONTRIBUTING.md](CONTRIBUTING.md): running it for development, the tests, and the rules a change has to keep
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): everything setup installs, from where, under which licence
+- [docs/RESEARCH.md](docs/RESEARCH.md): what was learned from clipping.net, GTA 6 Clipper, Clipify and OpenShorts
 
 ## Clipping other people's videos
 
@@ -174,8 +204,11 @@ face detector (MIT) · FFmpeg (the gyan.dev full build is GPL v3; it is run as a
 FastAPI, SQLAlchemy, Alembic, Pydantic (MIT), Starlette and Uvicorn (BSD) · NumPy and psutil (BSD), Pillow
 (MIT-CMU), cryptography (Apache 2.0 / BSD) · React, React Router, Vite, Tailwind CSS, TanStack Query (MIT),
 Lucide icons (ISC) · yt-dlp for importing from links (Unlicense) · optional fonts Noto Sans, Montserrat, Anton
-and Bebas Neue (SIL Open Font License).
+and Bebas Neue (SIL Open Font License). None of it is copied into this repository: setup installs it from its
+own source. The full list, with every package setup brings along, is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Ideas were adapted from two MIT-licensed projects, [Clipify](https://github.com/louisedesadeleer/clipify)
-and [GTA 6 Clipper](https://gitlab.com/nocodehack.io/gta6-clipper); their code was read and re-implemented,
-not copied or executed.
+Ideas were adapted from three MIT-licensed projects, [Clipify](https://github.com/louisedesadeleer/clipify),
+[GTA 6 Clipper](https://gitlab.com/nocodehack.io/gta6-clipper) and
+[OpenShorts](https://github.com/mutonby/openshorts). The ideas were written again for ClipForge; none of their
+code is in ClipForge or run by it.

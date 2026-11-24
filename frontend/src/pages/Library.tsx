@@ -1,7 +1,7 @@
 // Every clip, across all videos: search, filter, sort, select many, act on them together.
 import { Check, Download, Folders, FolderOutput, Heart, Pencil, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ClipThumb, ClipViewer, QcBadge, ReviewBadge, RightsBadge, ScoreRing, SourcePeek } from "../components/clips";
 import { ProjectsModal } from "../components/projects";
 import { Badge, Button, Empty, ErrorNote, Input, Select, Spinner, useToast } from "../components/ui";
@@ -10,10 +10,13 @@ import { clock, cx, duration } from "../lib/format";
 import { useActiveJobs, useClips, useOptions, useProjects, useRefreshAll, useVideos } from "../lib/hooks";
 
 export default function LibraryPage() {
+  // A link can open the library on one video's clips of one kind (Creator Discovery's "Its funny clips").
+  const [params] = useSearchParams();
   const [q, setQ] = useState("");
   const [review, setReview] = useState("");
   const [render, setRender] = useState("");
-  const [videoId, setVideoId] = useState("");
+  const [videoId, setVideoId] = useState(() => (/^\d+$/.test(params.get("video") ?? "") ? String(params.get("video")) : ""));
+  const [category, setCategory] = useState(() => params.get("category") ?? "");
   const [projectId, setProjectId] = useState("");
   const [managing, setManaging] = useState(false);
   const [favorite, setFavorite] = useState(false);
@@ -26,12 +29,12 @@ export default function LibraryPage() {
   const filters = useMemo(() => ({
     q: q.trim() || undefined, review_status: review || undefined, render_status: render || undefined,
     video_id: videoId ? Number(videoId) : undefined, project_id: projectId ? Number(projectId) : undefined,
-    favorite: favorite ? true : undefined, sort,
-  }), [q, review, render, videoId, projectId, favorite, sort]);
+    favorite: favorite ? true : undefined, category: category || undefined, sort,
+  }), [q, review, render, videoId, projectId, favorite, category, sort]);
   const clips = useClips(filters);
   const videos = useVideos();
   const projects = useProjects();
-  const filtered = Boolean(q || review || render || videoId || projectId || favorite);
+  const filtered = Boolean(q || review || render || videoId || projectId || favorite || category);
   const options = useOptions();
   const jobs = useActiveJobs();
   const refresh = useRefreshAll();
@@ -94,6 +97,10 @@ export default function LibraryPage() {
         <Select value={videoId} onChange={(event) => setVideoId(event.target.value)} className="w-auto! max-w-[220px]" aria-label="Source video">
           <option value="">All videos</option>
           {videos.data?.map((video) => <option key={video.id} value={video.id}>{video.title}</option>)}
+        </Select>
+        <Select value={category} onChange={(event) => setCategory(event.target.value)} className="w-auto! shrink-0" aria-label="Kind of moment">
+          <option value="">Every kind of moment</option>
+          {Object.entries(options.data?.categories ?? {}).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </Select>
         <Select value={review} onChange={(event) => setReview(event.target.value)} className="w-auto! shrink-0" aria-label="Review status">
           <option value="">Any review status</option><option value="pending">Awaiting review</option><option value="approved">Approved</option><option value="rejected">Rejected</option>

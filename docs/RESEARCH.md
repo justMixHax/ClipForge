@@ -1,9 +1,13 @@
-# Research: what ClipForge takes from the three references
+# Research: what ClipForge takes from its references
 
-Reviewed on 2026-11-21. Nothing from these projects was installed or executed; the code was read, and the
-techniques below were re-implemented for ClipForge. Both code projects are MIT licensed, so re-implementing
-their ideas with credit is allowed. clipping.net is a commercial product: only workflow concepts were studied,
-none of its interface or branding is copied.
+The first three were reviewed on 2026-11-21, before anything was built. Nothing from them was installed or
+executed for ClipForge; the code was read, and the techniques below were re-implemented. The code projects are
+MIT licensed, so re-implementing their ideas with credit is allowed. clipping.net is a commercial product:
+only workflow concepts were studied, none of its interface or branding is copied. A fourth project, OpenShorts,
+was looked at on 2026-11-24 (section 4).
+
+This page is a record of those dates. Where it says something is planned, [ROADMAP.md](../ROADMAP.md) says
+what has been built since.
 
 ## 1. Clipify (github.com/louisedesadeleer/clipify, MIT)
 
@@ -63,7 +67,28 @@ Concepts adopted:
 
 Not adopted: payouts, campaign marketplace, Discord sign-in. ClipForge is single-user and local.
 
-## Decisions for this PC
+## 4. OpenShorts (github.com/mutonby/openshorts, MIT)
+
+Looked at on 2026-11-24. Unlike the three above, a copy was set up on the author's PC, in Docker, to try it
+next to ClipForge; it was removed again afterwards, together with Docker. Its source was then read for ideas,
+and what was taken was written again for ClipForge. None of its code is in ClipForge or run by it.
+
+| Useful | How ClipForge uses it |
+|---|---|
+| A camera that behaves like a heavy tripod: it stays put while the person is near the middle, and moves only once they have really moved | `editing/follow.py`: **Follow the person** for the cropped layout. A move must be seen three times in a row, and FFmpeg moves the crop inside the same render |
+| Telling the user when a link only offers a poor picture | The link check warns before anything is downloaded |
+| A short zoom push on the big moments | Noted in the roadmap, not built |
+| Asking once per video whether the source already has subtitles burned in | Noted in the roadmap, not built |
+| What Twitch viewers clipped, as a hint for the picker | Noted in the roadmap, not built. The same thought led to Creator Discovery's hints from YouTube comments |
+| Three or four people tiled from one wide shot | Noted in the roadmap, not built |
+
+Built differently: OpenShorts picks its moments with Google's Gemini through an API key and is set up with
+Docker. ClipForge uses the Claude plan you already have, through the Claude Code tool, with its own rules as
+the fallback, and installs with one script and no extra services.
+
+## Decisions for the first PC
+
+As decided on 2026-11-21:
 
 | Area | Choice | Why |
 |---|---|---|

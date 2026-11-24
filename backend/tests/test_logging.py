@@ -81,3 +81,11 @@ def test_a_connection_the_browser_dropped_is_not_logged_as_an_error(caplog: pyte
         loop.close()
 
     assert [r.getMessage() for r in caplog.records] == ["Something real"]      # anything else is still logged
+
+
+def test_opencv_only_reports_its_errors_in_the_window_clipforge_runs_in():
+    import os
+
+    import app  # noqa: F401  (sets it when the backend is first loaded)
+
+    assert os.environ.get("OPENCV_LOG_LEVEL") == "ERROR"

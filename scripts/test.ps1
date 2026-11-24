@@ -3,9 +3,10 @@
   Runs the automated tests.
 
 .DESCRIPTION
-  Default: the fast suite (about a minute) plus a type-check of the interface.
+  Default: the tests that need no speech model (about six and a half minutes, most of it real renders) plus a
+  type-check of the interface.
   -All also runs the slow tests, which load the real speech model and process the sample video
-  (create it first with:  py -3.12 scripts\sample\make_sample.py).
+  (create it first with:  powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1).
 #>
 param([switch]$All)
 $ErrorActionPreference = "Stop"

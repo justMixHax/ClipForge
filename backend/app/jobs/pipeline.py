@@ -33,6 +33,7 @@ from ..analysis.lexicon import content_tokens
 from ..analysis.presets import CONTENT_PRESETS, LENGTH_RANGES
 from ..analysis.visual import VisualFeatures, compute_visual_features
 from ..config import get_settings
+from ..discovery.service import viewer_moments
 from ..editing.captions import (CaptionWord, build_ass, build_srt, build_vtt, mark_emphasis, resolve_style,
                                 words_for_clip)
 from ..editing.follow import follow_path
@@ -73,6 +74,7 @@ STAGES: dict[str, list[tuple[str, str, int]]] = {
                ("save", "Saving your clip", 3)],
     "publish": [("prepare", "Checking the post", 5), ("upload", "Uploading", 80),
                 ("confirm", "Waiting for the platform to confirm", 15)],
+    "discover": [("check", "Checking the channels you follow", 100)],
 }
 
 
@@ -529,6 +531,15 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         creator=video.creator_name, should_cancel=ctx.cancelled, on_progress=ctx.progress)
     timing["highlights"] = round(time.monotonic() - started, 1)
 
+    # Moments viewers wrote down in the comments, when this video was found through Creator Discovery. They are
+    # a hint and nothing more: when they cannot be read, the clips are found without them.
+    try:
+        with db.session_scope() as s:
+            pointed = viewer_moments(s, video)
+    except Exception:  # noqa: BLE001  (an optional hint must never cost the user the clips)
+        log.warning("viewers' moments could not be read", exc_info=True, extra={"video_id": video.id})
+        pointed = []
+
     def titles(items: Sequence[Any], limit: int = 3) -> str:
         names = [h if isinstance(h, str) else h.title for h in items]
         shown = ", ".join(f"“{name}”" for name in names[:limit])
@@ -558,7 +569,11 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
                               | {round(float(e["start"]), 1) for e in (audio.loud_events if audio else [])})
         prompt = claude_review.build_prompt(sentences, hl_options, title=video.title, creator=video.creator_name,
                                             game=opts.game_style, action_times=action_times,
-                                            duration=video.duration)
+                                            duration=video.duration, viewer_moments=pointed)
+        if pointed:
+            ctx.say("forge", "Told Claude where viewers' comments point: "
+                             + ", ".join(claude_review.clock(m["t"]) for m in pointed[:6])
+                             + (f" and {len(pointed) - 6} more" if len(pointed) > 6 else "") + ".")
         try:
             picks = claude_review.ask_claude(prompt, model=str(cfg["ai.claude_model"]), should_cancel=ctx.cancelled)
             chosen = highlights_from_picks(words, sentences, audio, visual, hl_options, picks,
@@ -623,6 +638,15 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
 
     # ---- save ------------------------------------------------------------------------------------
     ctx.start("save")
+    for h in highlights:   # a clip that holds a moment viewers pointed at says so in its evidence
+        for moment in pointed:
+            if h.start - 2.0 <= moment["t"] <= h.end:
+                mentions, likes = int(moment.get("mentions") or 1), int(moment.get("likes") or 0)
+                h.evidence.append({
+                    "dimension": "viewers", "impact": 0.0, "time": round(float(moment["t"]), 2),
+                    "quote": str(moment.get("text") or "") or None,
+                    "text": f"Viewers point at this moment in the comments ({mentions} "
+                            f"comment{'' if mentions == 1 else 's'}, {likes:,} like{'' if likes == 1 else 's'})"})
     settings = opts.clip_settings()
     settings["captions"]["censor"] = bool(cfg["captions.censor"])
     with db.session_scope() as s:
@@ -1057,7 +1081,13 @@ def _publish(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     return run_publish(ctx, job)
 
 
-HANDLERS = {"analyze": _analyze, "render": _render, "import": _import, "moment": _moment, "publish": _publish}
+def _discover(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
+    from ..discovery.service import run_check_job  # imported here: discovery builds on this module
+    return run_check_job(ctx, job)
+
+
+HANDLERS = {"analyze": _analyze, "render": _render, "import": _import, "moment": _moment, "publish": _publish,
+            "discover": _discover}
 
 
 def _record_failure(job: dict[str, Any], message: str) -> None:
@@ -1080,6 +1110,8 @@ def _record_failure(job: dict[str, Any], message: str) -> None:
             if post is not None and post.status == "publishing":  # stopped by something the job did not expect
                 post.status, post.error, post.next_run_at = "failed", message, None
                 notify(s, "job_failed", f"A post failed: “{post.clip_title}”", message, "/publishing")
+        elif job["type"] == "discover":
+            notify(s, "job_failed", "The channels you follow could not be checked", message, "/discovery")
         elif job["type"] == "moment":
             at = _clock(float((job.get("payload") or {}).get("start") or 0))
             notify(s, "job_failed", f"Your moment at {at} could not be made into a clip", message,

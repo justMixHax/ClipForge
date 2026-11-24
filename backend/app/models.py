@@ -269,6 +269,67 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
+# --- creator discovery -------------------------------------------------------------------------------
+class Creator(Base):
+    """A channel you follow. What is kept about it is what the official API returns for anyone, plus your own
+    record of whether you may clip its videos (the same rights record a video carries)."""
+
+    __tablename__ = "creators"
+    __table_args__ = (Index("ix_creators_platform_external", "platform", "external_id", unique=True),
+                      {"sqlite_autoincrement": True})
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(16), default="youtube")
+    external_id: Mapped[str] = mapped_column(String(100))            # the channel id (UC…)
+    title: Mapped[str] = mapped_column(String(300), default="")
+    handle: Mapped[str] = mapped_column(String(200), default="")     # @name, when the channel has one
+    url: Mapped[str] = mapped_column(Text, default="")
+    thumb_url: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    subscribers: Mapped[int | None] = mapped_column(Integer, default=None)   # None: the channel hides it
+    video_count: Mapped[int | None] = mapped_column(Integer, default=None)
+    uploads_playlist: Mapped[str] = mapped_column(String(100), default="")
+    permission_status: Mapped[str] = mapped_column(String(16), default="unknown")   # see PERMISSION_STATUSES
+    permission_note: Mapped[str] = mapped_column(Text, default="")
+    check_error: Mapped[str] = mapped_column(Text, default="")       # why the last check did not work, if it did not
+    followed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)   # the last check that worked
+    tried_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)     # the last check, worked or not
+
+    videos: Mapped[list[CreatorVideo]] = relationship(back_populates="creator", cascade="all, delete-orphan",
+                                                       passive_deletes=True)
+
+
+class CreatorVideo(Base):
+    """An upload of a followed channel, as the official API described it at stats_at. It is a suggestion, not a
+    video in your library: importing it is a separate step that asks for your right to clip it."""
+
+    __tablename__ = "creator_videos"
+    __table_args__ = (Index("ix_creator_videos_creator_external", "creator_id", "external_id", unique=True),
+                      {"sqlite_autoincrement": True})
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    creator_id: Mapped[int] = mapped_column(ForeignKey("creators.id", ondelete="CASCADE"), index=True)
+    external_id: Mapped[str] = mapped_column(String(32))             # the video id
+    title: Mapped[str] = mapped_column(String(300), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)
+    duration: Mapped[float] = mapped_column(Float, default=0.0)      # seconds; 0 while it is live or not started
+    live: Mapped[str] = mapped_column(String(16), default="none")    # none | live | upcoming
+    was_live: Mapped[bool] = mapped_column(Boolean, default=False)   # the recording of a stream
+    views: Mapped[int | None] = mapped_column(Integer, default=None)
+    likes: Mapped[int | None] = mapped_column(Integer, default=None)
+    comments: Mapped[int | None] = mapped_column(Integer, default=None)
+    thumb_url: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)   # new | dismissed
+    # what its top comments say (discovery/signals.comment_signals), or {"off": true} when comments are off
+    signals: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    stats_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)   # when the numbers were read
+    found_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    creator: Mapped[Creator] = relationship(back_populates="videos")
+
+
 # --- publishing --------------------------------------------------------------------------------------
 PLATFORMS = ("youtube", "tiktok", "instagram")
 # scheduled: waiting for its time (or to be uploaded) · publishing: ClipForge is uploading it

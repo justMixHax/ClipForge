@@ -7,12 +7,15 @@ function Get-VenvDir {
     # The Python environment normally lives in backend\.venv. Windows cannot load libraries from very
     # long paths, so when the project sits in a deep folder the environment is kept in a short path
     # instead, and its location is remembered in .venv-path.
+    # That short path is in your user folder, not under AppData: Windows shows a packaged app (the Claude
+    # desktop app, for one) its own private copy of AppData, so an environment made there from inside such an
+    # app cannot be seen by a shortcut on the desktop.
     $marker = Join-Path $script:ProjectRoot ".venv-path"
     if (Test-Path $marker) {
         $saved = (Get-Content -Raw $marker).Trim()
         if ($saved) { return $saved }
     }
-    if ($script:ProjectRoot.Length -gt 100) { return (Join-Path $env:LOCALAPPDATA "ClipForge\venv") }
+    if ($script:ProjectRoot.Length -gt 100) { return (Join-Path $env:USERPROFILE ".clipforge\venv") }
     return (Join-Path $script:ProjectRoot "backend\.venv")
 }
 
@@ -31,6 +34,13 @@ function Write-Step($text) { Write-Host "  [doing]   $text" -ForegroundColor Cya
 function Write-Warn($text) { Write-Host "  [note]    $text" -ForegroundColor Yellow }
 function Write-Miss($text) { Write-Host "  [MISSING] $text" -ForegroundColor Red }
 function Write-Fail($text) { Write-Host "  [problem] $text" -ForegroundColor Red }
+
+function Show-Problem($text) {
+    # For a start from the desktop shortcut: its window is minimised and closes when the script ends, so a
+    # problem written there is never seen. This puts it in a small window instead (it closes by itself after
+    # five minutes).
+    try { (New-Object -ComObject WScript.Shell).Popup($text, 300, "ClipForge could not start", 48) | Out-Null } catch { }
+}
 
 function Invoke-Native($exe, [string[]]$arguments, $workingDirectory) {
     # Runs a program, shows what it prints, and returns only its exit code.

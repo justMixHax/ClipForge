@@ -6,7 +6,10 @@ secret to the API layer for display.
 """
 from __future__ import annotations
 
+import logging
+import os
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,7 +19,9 @@ from ..analysis.chatgpt_review import valid_model
 from ..config import get_settings
 from ..errors import ClipForgeError
 from ..models import Secret, Setting
-from ..security.secrets import SecretBox
+from ..security.secrets import SecretBox, SecretError
+
+log = logging.getLogger("clipforge.settings")
 
 
 def _choice(*allowed: str) -> Callable[[Any], bool]:
@@ -70,6 +75,8 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "llm.allow_paid": (False, _flag),
     "notifications.browser": (True, _flag),
     "publish.daily_limit": (6, _number(1, 25)),
+    # how often followed channels are looked at by themselves while ClipForge runs; 0: only when you press Check
+    "discovery.check_hours": (6, _number(0, 168)),
 }
 SECRET_NAMES = ("llm.openai_api_key", "llm.anthropic_api_key", "youtube.api_key")
 
@@ -107,11 +114,27 @@ def set_many(session: Session, values: dict[str, Any]) -> dict[str, Any]:
 _box: SecretBox | None = None
 
 
-def _secret_box() -> SecretBox:
+def _secret_box(*, renew: bool = False) -> SecretBox:
+    """The box that encrypts stored credentials with this PC's key file.
+
+    renew: when the key file cannot be opened here (the data folder was copied from another PC or Windows
+    account, or Windows was installed again), put it aside and start a new one. Only for saving a credential:
+    what was stored with the old key cannot be read either way and has to be entered again, and without a new
+    key file that would not be possible. The old file is kept, in case it was this PC's after all."""
     global _box
     key_path = get_settings().data_dir / "secret.key"
     if _box is None or _box._key_path != key_path:
-        _box = SecretBox(key_path)
+        try:
+            _box = SecretBox(key_path)
+        except SecretError:
+            if not renew or not key_path.exists():
+                raise
+            aside = key_path.with_name(f"secret.key.unreadable-{datetime.now():%Y%m%d-%H%M%S}")
+            os.replace(key_path, aside)
+            log.warning("The key file for stored credentials could not be opened on this PC. It was put aside "
+                        "and a new one started; credentials saved before have to be entered again.",
+                        extra={"kept_as": aside.name})
+            _box = SecretBox(key_path)
     return _box
 
 
@@ -131,9 +154,9 @@ def put_secret(session: Session, name: str, value: str) -> None:
         if row is not None:
             session.delete(row)
     elif row is None:
-        session.add(Secret(name=name, ciphertext=_secret_box().encrypt(value)))
+        session.add(Secret(name=name, ciphertext=_secret_box(renew=True).encrypt(value)))
     else:
-        row.ciphertext = _secret_box().encrypt(value)
+        row.ciphertext = _secret_box(renew=True).encrypt(value)
     session.commit()
 
 

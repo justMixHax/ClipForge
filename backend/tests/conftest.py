@@ -15,6 +15,13 @@ import pytest
 # The user's own .env (their real configuration) must never change how the tests behave.
 os.environ["CLIPFORGE_ENV_FILE"] = ""
 
+# No test may reach the real YouTube Data API. Tests that need it start a stand-in (fake_youtube_data.py); one that
+# forgets it, or loses it half-way, talks to an address on this PC where nothing listens, and fails. Set here for
+# the whole run rather than in a fixture, so that nothing a test undoes can bring the real address back.
+from app.discovery import youtube_api  # noqa: E402
+
+youtube_api.API = "http://127.0.0.1:9/youtube/v3"
+
 BACKEND = Path(__file__).resolve().parent.parent
 ROOT = BACKEND.parent
 SAMPLE_VIDEO = ROOT / "samples" / "clipforge_sample.mp4"

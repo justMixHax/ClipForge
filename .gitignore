@@ -22,3 +22,6 @@ __pycache__/
 Thumbs.db
 .DS_Store
 /.claude/
+
+# Local analysis output (a code map made by a tool on one PC; it holds that PC's folder paths)
+/graphify-out/

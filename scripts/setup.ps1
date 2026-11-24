@@ -108,9 +108,7 @@ $yunet = Join-Path $yunetDir "face_detection_yunet_2023mar.onnx"
 if (Test-Path $yunet) { Write-Ok "Face detector" }
 else {
     New-Item -ItemType Directory -Force -Path $yunetDir | Out-Null
-    $local = Join-Path $env:USERPROFILE ".claude\skills\gta6-clipper\models\face_detection_yunet_2023mar.onnx"
-    if (Test-Path $local) { Copy-Item $local $yunet; Write-Ok "Face detector (copied from this PC)" }
-    elseif (Confirm-Download "the YuNet face detector from the OpenCV model zoo (228 KB)") {
+    if (Confirm-Download "the YuNet face detector from the OpenCV model zoo (228 KB)") {
         try {
             Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx" -OutFile $yunet
             Write-Ok "Face detector"

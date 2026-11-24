@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
-from app.models import Account, Clip, Post, Secret, Video
+from app.models import Clip, Post, Secret, Video
 from app.publishing import store
 from app.publishing.base import Profile, Tokens
 from app.services import storage
@@ -87,6 +87,29 @@ def test_app_credentials_are_kept_encrypted_and_the_secret_never_comes_back(clie
 
     assert client.delete("/api/publishing/apps/youtube").status_code == 200
     assert not next(p for p in client.get("/api/publishing").json()["platforms"] if p["platform"] == "youtube")["configured"]
+
+
+def test_after_the_data_folder_moved_to_another_pc_the_page_still_opens_and_the_app_can_be_entered_again(
+        client: TestClient, data_dir, monkeypatch):  # noqa: ANN001
+    import base64
+
+    from app.services import settings_store
+
+    set_up(client, "youtube")
+    (data_dir / "secret.key").write_bytes(b"DPAPI1:" + base64.b64encode(b"wrapped for another Windows account"))
+    monkeypatch.setattr(settings_store, "_box", None)                      # as after starting ClipForge there
+
+    page = client.get("/api/publishing")
+    refused = client.post("/api/publishing/connect/youtube")
+    set_up(client, "youtube")                                              # entered again, on this PC
+    again = client.post("/api/publishing/connect/youtube")
+
+    assert page.status_code == 200, page.text
+    assert next(p for p in page.json()["platforms"] if p["platform"] == "youtube")["configured"] is False
+    assert refused.status_code == 400 and "cannot be read on this PC" in refused.json()["error"]
+    assert "again" in refused.json()["hint"]
+    assert again.status_code == 200 and again.json()["url"]
+    assert len(list(data_dir.glob("secret.key.unreadable-*"))) == 1        # the old key file is put aside, not deleted
 
 
 def test_an_unknown_platform_or_a_half_filled_app_is_refused(client: TestClient):

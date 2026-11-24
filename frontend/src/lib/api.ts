@@ -556,3 +556,92 @@ export interface PublishPost {
   published_at: string | null;
   thumb_url: string;
 }
+
+// --------------------------------------------------------------------------------------- creator discovery
+export interface DiscoveryCreator {
+  id: number;
+  platform: string;
+  external_id: string;
+  title: string;
+  handle: string;
+  url: string;
+  thumb_url: string;
+  description: string;
+  /** null: the channel hides its subscriber count */
+  subscribers: number | null;
+  video_count: number | null;
+  /** your own record of whether you may clip this creator's videos */
+  permission_status: Permission;
+  permission_note: string;
+  /** why the last look at the channel did not work, if it did not */
+  check_error: string;
+  followed_at: string;
+  checked_at: string | null;
+  /** long, finished videos waiting in the list */
+  videos_listed: number;
+}
+
+export interface DiscoveryOverview {
+  key_set: boolean;
+  /** YouTube quota units ClipForge itself used today (YouTube's day starts at midnight Pacific time) */
+  usage: { day: string; units: number; limit: number };
+  check_hours: number;
+  paused: { until: string; why: string } | null;
+  checking: { job_id: number; status: string; progress: number; message: string } | null;
+  creators: DiscoveryCreator[];
+  suggestions: { name: string; videos: number; link: string }[];
+}
+
+export interface FoundChannel {
+  id: string;
+  title: string;
+  handle: string;
+  url: string;
+  description: string;
+  thumb_url: string;
+  subscribers: number | null;
+  video_count: number | null;
+  /** set when you already follow it */
+  creator_id: number | null;
+}
+
+/** A moment viewers wrote down in the comments. */
+export interface ViewerMoment {
+  t: number;
+  mentions: number;
+  likes: number;
+  text: string;
+  laughing: boolean;
+  url: string;
+}
+
+export interface FoundVideo {
+  id: number;
+  creator_id: number;
+  creator_title: string;
+  creator_rights: Permission;
+  external_id: string;
+  url: string;
+  title: string;
+  description: string;
+  published_at: string | null;
+  duration: number;
+  live: "none" | "live" | "upcoming";
+  was_live: boolean;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  thumb_url: string;
+  status: "new" | "dismissed";
+  /** when YouTube's numbers were read */
+  stats_at: string;
+  /** published in the last two days: its numbers are still growing */
+  fresh: boolean;
+  /** views as a multiple of the channel's usual; null when there is too little to compare with */
+  standout: number | null;
+  /** what its top comments say, as plain counts; null when they were not read */
+  signals: { off: boolean; checked: number; laughing: number; fetched_at: string | null; moments: ViewerMoment[] } | null;
+  /** set when the video is already in your library */
+  library: { video_id: number; status: string; title: string; clips: number; best: number | null; funny: number; best_funny: number | null } | null;
+  importing: { job_id: number; status: string; progress: number; message: string } | null;
+}

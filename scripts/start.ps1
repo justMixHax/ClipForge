@@ -19,6 +19,10 @@
   For working on the interface: also starts the live-reloading development server in a second window
   and opens http://localhost:5173 instead. Not needed for normal use.
 
+.PARAMETER Shortcut
+  Set by the desktop shortcut. Its window is minimised and closes when this script ends, so a problem that
+  stops ClipForge from starting is also shown in a small window of its own.
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\start.ps1
   powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Port 3100 -NoBrowser
@@ -26,19 +30,25 @@
 param(
     [int]$Port = 0,
     [switch]$NoBrowser,
-    [switch]$Dev
+    [switch]$Dev,
+    [switch]$Shortcut
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "common.ps1")
 
-$python = Get-VenvPython
-if (-not (Test-Path $python)) {
-    Write-Miss "ClipForge is not set up yet. Run:  powershell -ExecutionPolicy Bypass -File scripts\setup.ps1"
+function Stop-Start($text) {
+    # Says why ClipForge cannot start and ends the script. From the shortcut, also in a window you can see.
+    Write-Miss $text
+    if ($Shortcut) { Show-Problem $text }
     exit 1
 }
+
+$python = Get-VenvPython
+if (-not (Test-Path $python)) {
+    Stop-Start ("ClipForge's Python environment was not found at " + (Get-VenvDir) + ". Set it up first: open PowerShell in " + $ProjectRoot + " and run:  powershell -ExecutionPolicy Bypass -File scripts\setup.ps1")
+}
 if (-not (Test-Path (Join-Path $ProjectRoot "frontend\dist\index.html"))) {
-    Write-Miss "The interface has not been built. Run scripts\setup.ps1 (or 'npm run build' in the frontend folder)."
-    exit 1
+    Stop-Start "The interface has not been built. Run scripts\setup.ps1 (or 'npm run build' in the frontend folder)."
 }
 if (-not (Find-Tool "ffmpeg")) { Write-Warn "FFmpeg is not on PATH. Videos cannot be processed until it is installed (winget install Gyan.FFmpeg)." }
 
@@ -48,8 +58,7 @@ if ($Port -gt 0) { $env:CLIPFORGE_PORT = "$Port" }
 # Ask the app where it will listen, so .env is read exactly as the server reads it.
 $where = Get-AppValue "from app.serve import server_options as o; x = o(); print(x['host'], x['port'])"
 if (-not $where) {
-    Write-Fail "ClipForge could not read its settings (the reason is printed above). Check the .env file in the project folder."
-    exit 1
+    Stop-Start "ClipForge could not read its settings. Check the .env file in the project folder; running scripts\start.ps1 in a PowerShell window shows the reason."
 }
 $bindHost, $bindPort = "$where".Trim() -split " ", 2
 $bindPort = [int]$bindPort
@@ -64,10 +73,9 @@ if ($listener) {
         if (-not $NoBrowser) { Start-Process "http://localhost:$bindPort" }
         exit 0
     }
-    Write-Fail "Port $bindPort is already in use (process $($listener.OwningProcess)). ClipForge may already be running: open http://localhost:$bindPort"
     Write-Host "            To stop a running copy:  powershell -ExecutionPolicy Bypass -File scripts\stop.ps1"
     Write-Host "            To use another port:     powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Port 3100"
-    exit 1
+    Stop-Start "Port $bindPort is already in use by another program (process $($listener.OwningProcess)), so ClipForge cannot start there. Close that program, or set another port (CLIPFORGE_PORT) in the .env file."
 }
 
 Write-Host ""
@@ -106,5 +114,8 @@ try {
     $code = $LASTEXITCODE
 } finally {
     Pop-Location
+}
+if ($code -ne 0 -and $Shortcut) {
+    Show-Problem "ClipForge stopped because of a problem (code $code). What went wrong is at the end of data\logs\api.log in $ProjectRoot."
 }
 exit $code

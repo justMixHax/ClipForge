@@ -21,5 +21,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("clips") as batch:
+    # a rebuild must be told the table never reuses an id: SQLite does not report that rule
+    with op.batch_alter_table("clips", table_kwargs={"sqlite_autoincrement": True}) as batch:
         batch.drop_column("last_edit")

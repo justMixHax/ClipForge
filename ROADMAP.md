@@ -1,7 +1,8 @@
 # Roadmap
 
-Status as of 23 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
-marked done because the code merely exists.
+Status as of 24 November 2026. "Done" means built and tested (see [TESTING.md](TESTING.md)); nothing here is
+marked done because the code merely exists. ClipForge was built for one person's PC first, so "you" in the
+dated notes below is that first user, and "this PC" is theirs.
 
 | Mark | Meaning |
 |---|---|
@@ -21,7 +22,7 @@ marked done because the code merely exists.
 | Job queue | ✅ | Persistent, with progress stages, cancel, retry and resume after a restart |
 | Video preview | ✅ | Source playback with seeking, and "play the source from this moment" on every clip |
 | Local storage | ✅ | Everything under `data/`, relative paths, storage report and cleanup |
-| Working navigation | ✅ | Ten areas; the five that are not built say so instead of pretending |
+| Working navigation | ✅ | Ten areas; the three that are not built say so instead of pretending |
 
 ## Milestone 2 · Functional AI clipping — done
 
@@ -58,14 +59,19 @@ marked done because the code merely exists.
 | What Twitch viewers clipped, as a hint for the picker | ⬜ | Noted from OpenShorts: Twitch's official API lists viewers' clips of a recording with their place in it; needs your own free Twitch app keys |
 | Three or four people tiled from one wide shot | ⬜ | Noted from OpenShorts |
 
-## Milestone 4 · YouTube discovery and automation — started
+## Milestone 4 · YouTube discovery and automation — discovery built, waiting for your key
+
+Creator Discovery was built on 24 November 2026 from the YouTube Data API's documentation as it stood that
+month, and tested against a local stand-in of it. It has not yet asked the real API for anything: that needs
+your own free key (Creator Discovery shows the four steps). Its line moves to ✅ after its first real check.
 
 | Deliverable | | Notes |
 |---|---|---|
-| Permission-aware source management | ✅ | Rights status and note on every source, carried into every clip's post text |
-| Creator search, watchlists, upload monitoring | ⬜ | Will use the YouTube Data API with your own key |
+| Permission-aware source management | ✅ | Rights status and note on every source, carried into every clip's post text. A right can also be recorded once per creator you follow |
+| Creator search, watchlists, upload monitoring | 🟡 | **Creator Discovery**: follow channels by link, @handle or name. Their newest long videos are listed with what YouTube's public data says: views against the channel's usual, how many of the top comments are laughing, and the moments viewers wrote down. Followed channels are looked at again every few hours while ClipForge runs (you choose how often, or never), and the page shows what that cost of the free daily quota. Official API only, with your own key |
+| From a found video to its funny clips | 🟡 | **Import and find clips** on a found video asks for your right to clip it, then imports and analyses it. Viewers' moments go to Claude as hints, never instructions, and a clip that holds one says so in its evidence. Afterwards the list shows how its clips scored and how many are funny, and the Clip Library filters by the kind of moment. Tested end to end with stand-ins; not yet with a real key |
 | Import from a link | ✅ | Public videos from YouTube, Twitch, Kick and most video sites, through yt-dlp. No sign-in, no cookies. Your right to clip is asked before anything is downloaded, and an import can go straight on to finding clips |
-| Automated processing workflows | ⬜ | The queue and "render straight away" exist; rules that start jobs by themselves do not |
+| Automated processing workflows | ⬜ | The queue, "render straight away" and the look at followed channels by itself exist. Rules that import or post by themselves do not, on purpose: an import needs your say about the right to clip |
 
 ## Milestone 5 · Social publishing — built, waiting for your accounts
 
@@ -104,19 +110,21 @@ need publishing or analytics show a dash.
 | Performance | ✅ | Graphics-card encoding and speech-to-text, cached intermediates, one decode per render; measuring the picture skips frames nothing depends on (a 2-hour 1080p60 stream: 121 s instead of about 220 s) |
 | Error handling | ✅ | Every failure path tested shows a message that says what to do |
 | Responsive interface | ✅ | Desktop and phone width |
-| Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Not reviewed by anyone else |
-| Testing | ✅ | 800 automated tests |
-| Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder |
+| Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Every change since 22 November 2026 was also reviewed by ChatGPT. Not reviewed by another person |
+| Testing | ✅ | 1,170 automated tests, run on one PC |
+| Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder, desktop shortcut |
 | Documentation | ✅ | |
+| Ready to be public | 🟡 | A contributing guide, third-party notices, a test that keeps folder paths from the author's PC and anything secret out of the repository, and a test workflow for GitHub. Still missing: a licence (the author's choice) and the first run on GitHub; see "Before the project is public" below |
 
 ## What I would do next, in order
 
-1. **Run it on your real recordings.** This is the largest unknown. The scoring rules were tuned on a
-   synthetic sample; real streams will show where they are wrong. Use the feedback buttons, then adjust the
-   cue lists in `backend/app/analysis/lexicon.py` and the weights in `presets.py` against what you see.
-   The one real video tried so far (a 15-minute animated film with only 65 spoken words, imported from a
-   link) was transcribed correctly. Its two spoken moments scored 44 and 41, below the default minimum of 55.
-   That showed the engine ignored everything between the lines, which led to the next point.
+1. **Run it on more real recordings.** This is still the largest unknown. The scoring rules were tuned on a
+   synthetic sample; real streams show where they are wrong. Use the feedback buttons, then adjust the cue
+   lists in `backend/app/analysis/lexicon.py` and the weights in `presets.py` against what you see.
+   The first real video (a 15-minute animated film with only 65 spoken words, imported from a link) was
+   transcribed correctly, but its two spoken moments scored 44 and 41, below the default minimum of 55. That
+   showed the engine ignored everything between the lines, which led to the next point. The first real
+   streams, a day later, are why Claude became the picker (point 5).
 2. ~~Suggest moments from stretches with no speech.~~ **Done on 21 November 2026.** Where almost nothing is
    said, loud and busy moments now fill the places the spoken moments left free. On that film it found the
    three action scenes (scores 55 to 56, low confidence). It still needs trying on real gameplay.
@@ -133,8 +141,11 @@ need publishing or analytics show a dash.
 7. ~~YouTube Shorts upload, then the publishing queue and calendar.~~ **Built on 22 November 2026**, with
    TikTok drafts and Instagram Reels. Next there: connect your accounts and make the first real post on each,
    which is the real test.
-8. **Analytics** from connected accounts, and with them the strategist.
-9. **Subject tracking and who-is-speaking detection.**
+8. ~~Creator discovery.~~ **Built on 24 November 2026.** Next there: put in a key, follow the first channels and
+   watch the first real check. Then see whether laughing comments and written-down times really point at the
+   moments worth clipping; the counting is tested, what it is worth is not.
+9. **Analytics** from connected accounts, and with them the strategist.
+10. **Who-is-speaking detection**, and following a person in the stacked layouts too.
 
 ## Done on 22 November 2026 (after the list above)
 
@@ -145,27 +156,48 @@ need publishing or analytics show a dash.
 
 ## What needs you
 
-Nothing was needed to build the first milestones. These are needed before the later ones can start:
+Clipping your own files needs nothing but the setup script. Everything that talks to a service uses an
+account or key of your own, which only you can make:
 
 | For | From you |
 |---|---|
-| Creator discovery | A YouTube Data API key from your own Google Cloud project (the free quota is enough for personal use) |
+| Claude as the clip picker, prompt edits, post text | [Claude Code](https://claude.com/claude-code) installed and signed in with your own Claude plan ([SETUP_WINDOWS.md](SETUP_WINDOWS.md), step 8). No API key |
+| ChatGPT's second opinion | The ChatGPT app with its Codex tool, signed in with your ChatGPT plan. No API key |
+| Creator Discovery | A YouTube Data API key from your own Google Cloud project. It is free, and the free daily quota is enough for following dozens of channels |
 | YouTube Shorts upload | An OAuth client in that project, and your consent on Google's own screen. For public uploads, Google's API audit of the project |
 | TikTok | A TikTok developer app and their audit |
 | Instagram | A Meta developer app, their review, and a professional Instagram account |
-| Language-model review | Either Ollama installed with a model pulled, or an API key and your explicit switch for paid requests |
-| Importing from a link | Nothing more. You decided on 21 November 2026 to build it for public videos, without sign-ins |
+| Importing from a link | Nothing more: public videos only, without sign-ins (decided on 21 November 2026) |
+
+## Before the project is public
+
+For the author, who is the only one who can decide these:
+
+| What | Why |
+|---|---|
+| A licence file | Without one, nobody else may legally use or change the code, whatever the README says. MIT would match the projects ClipForge learned from |
+| Whether the existing Git history is published | Every commit carries its author's name and mail address. Publishing the history makes both public; starting the public repository from one fresh commit does not |
+| Private vulnerability reporting, switched on in the repository's settings | [SECURITY.md](SECURITY.md) sends security reports there |
+| The first run of the test workflow | `.github/workflows/tests.yml` has never run and may need adjusting |
 
 ## Known limitations
 
-- Suggestions are heuristic estimates. They are not predictions, and they have not been validated on real
-  content.
+- Suggestions are estimates, from Claude or from the local rules. They are not predictions, and they have
+  been tried on a handful of real streams only.
 - The cue lists are English. Other languages lean on the non-text signals and get lower confidence.
 - Moments with almost nothing said are found by loudness and picture activity alone, with low confidence.
   They are titled "Action at 4:11", not described, because nothing looks at what is actually in the picture.
   A quiet but funny visual moment is still missed.
 - Importing from a link depends on yt-dlp keeping up with each site. It will break from time to time until
   `scripts\update-downloader.ps1` is run. Only YouTube has been tried; Twitch and Kick links have not.
+- The status list marks Claude's features as working when the Claude Code tool is found on the PC. Whether it
+  is signed in, and whether the plan still has room, shows with the first job: it says so and the local rules
+  take over.
 - One job runs at a time.
-- The crop does not move during a clip.
-- Tested on one PC. See "Not tested" in [TESTING.md](TESTING.md).
+- The crop is fixed for a clip unless **Follow the person** is on, which moves it sideways only, and only in
+  the cropped layout.
+- Creator Discovery is YouTube only. Each look reads a channel's 25 newest uploads and the top 100 comments
+  (as YouTube ranks them) of at most 12 long videos, so a moment viewers point at is a hint from a sample, not
+  a count of everything said. Its numbers are counts from public data; whether they point at good clips on
+  the channels you follow is for you to see.
+- Windows only, and tested on one PC. See "Not tested" in [TESTING.md](TESTING.md).

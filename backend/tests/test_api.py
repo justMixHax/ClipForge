@@ -382,15 +382,18 @@ def test_nothing_unbuilt_is_presented_as_merely_needing_setup(client: TestClient
 
     before = statuses()
     assert before["youtube_url"] == "working"                         # link import is built (yt-dlp is installed)
-    for key in ("llm_pass", "diarization", "discovery", "automation", "analytics", "strategist"):
+    for key in ("llm_pass", "diarization", "automation", "analytics", "strategist"):
         assert before[key] == "planned", key
     assert before["publish_tiktok_direct"] == "blocked"
+    assert before["discovery"] == "needs_setup"                       # built; it needs your own YouTube API key
 
     # storing a key or choosing a provider does not bring an unbuilt feature any closer to working
-    assert client.put("/api/settings/secret", json={"name": "youtube.api_key", "value": "not-a-real-key"}).status_code == 200
+    assert client.put("/api/settings/secret", json={"name": "llm.openai_api_key", "value": "not-a-real-key"}).status_code == 200
     assert client.put("/api/settings", json={"values": {"llm.provider": "ollama"}}).status_code == 200
+    # and a stored key alone does not make a built one "working": that takes a real answer from YouTube
+    assert client.put("/api/settings/secret", json={"name": "youtube.api_key", "value": "not-a-real-key"}).status_code == 200
     after = statuses()
-    assert after["discovery"] == "planned" and after["llm_pass"] == "planned"
+    assert after["llm_pass"] == "planned" and after["discovery"] == "needs_setup"
 
 
 def test_a_pc_without_a_graphics_card_is_not_told_a_third_party_is_blocking_it(client: TestClient):
@@ -501,3 +504,28 @@ def test_following_the_person_is_a_switch_on_the_clip(client: TestClient, clip: 
 
     assert on.status_code == 200 and on.json()["settings"]["follow"] is True
     assert client.patch(f"/api/clips/{clip['id']}", json={"settings": {"follow": "yes"}}).status_code == 400
+
+
+def test_a_part_of_the_picture_that_reaches_past_the_video_is_refused(client: TestClient, clip: dict):
+    video = client.get(f"/api/videos/{clip['video_id']}").json()
+    width, height = video["width"], video["height"]
+
+    inside = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"facecam_box": [0, 0, width, height // 2]}})
+    outside = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"gameplay_box": [width - 10, 0, 200, 100]}})
+    below = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"facecam_box": [0, height - 10, 100, 200]}})
+
+    assert inside.status_code == 200, inside.text
+    assert outside.status_code == 400 and "past the edge" in outside.json()["error"]
+    assert f"{width}×{height}" in outside.json()["error"] and below.status_code == 400
+    saved = client.get(f"/api/clips/{clip['id']}").json()["settings"]
+    assert saved["facecam_box"] == [0, 0, width, height // 2] and not saved.get("gameplay_box")
+
+
+def test_a_part_saved_before_this_check_does_not_block_other_changes(client: TestClient, clip: dict):
+    with db.session_scope() as s:
+        row = s.get(Clip, clip["id"])
+        row.settings = {**row.settings, "facecam_box": [600, 300, 400, 400]}       # past the edge of a 640x360 video
+
+    changed = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"zoom": 1.5}})
+
+    assert changed.status_code == 200 and changed.json()["settings"]["zoom"] == 1.5

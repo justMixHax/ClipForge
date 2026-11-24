@@ -15,6 +15,8 @@ that one command only).
 | About 3 GB of free disk space | Python packages 450 MB, interface packages 130 MB, speech model 480 MB, plus your videos | |
 | A reasonably modern processor and 8 GB of memory or more | Speech-to-text and encoding. Built and tested on a 6-core i5-11400 with 16 GB; nothing smaller has been tried | |
 | NVIDIA graphics card | Optional. Faster video encoding works straight away; faster speech-to-text needs step 6 | |
+| Claude Code, signed in | Optional, and what ClipForge is built around: Claude picks the clips, makes prompt edits and writes post text, through your own Claude plan. Without it the local rules pick | [claude.com/claude-code](https://claude.com/claude-code), then step 8 |
+| The ChatGPT app with Codex, signed in | Optional: ChatGPT's second opinion on Claude's picks | Step 8 |
 
 Python 3.12 specifically: the speech and vision libraries publish ready-made builds for it. If you have `uv`,
 setup uses it and `uv` fetches Python 3.12 itself if it is missing.
@@ -33,7 +35,7 @@ It is safe to run again at any time. What it does, in order:
 3. Creates `.env` from `.env.example` if you do not have one.
 4. Installs a speech model. If one is already in a model cache on this PC it is copied; otherwise setup asks
    before downloading `small.en` (about 480 MB) from Hugging Face.
-5. Installs the face detector (228 KB), copied if already on this PC, otherwise it asks before downloading.
+5. Installs the face detector (228 KB), after asking, from the OpenCV model zoo on GitHub.
 6. Installs the interface packages (from npm) and builds the interface.
 
 Options:
@@ -58,7 +60,8 @@ One window runs the interface, the API and the worker that does the processing, 
 
 - **Desktop shortcut:** `powershell -ExecutionPolicy Bypass -File scripts\shortcut.ps1` puts a **ClipForge**
   shortcut on your desktop. Double-click it to start ClipForge in a minimised window and open it in the browser;
-  if it is already running, the shortcut just opens it.
+  if it is already running, the shortcut just opens it. If it cannot start, a small window says why, since the
+  minimised one would close before you could read it.
 - **Stop:** press **Shut down ClipForge** at the bottom of the app's menu, press Ctrl+C in that window, or from
   another terminal run
   `powershell -ExecutionPolicy Bypass -File scripts\stop.ps1`. A job that was running goes back in the queue and
@@ -70,9 +73,10 @@ One window runs the interface, the API and the worker that does the processing, 
 **The database** needs no setup. `data\clipforge.db` is created the first time ClipForge starts, and
 upgraded automatically whenever a newer version of the app needs a change to it.
 
-**External APIs:** none are needed, and none are called. When creator discovery and publishing are built they
-will need keys and sign-ins of your own; [ROADMAP.md](ROADMAP.md) lists exactly what, under "What needs you".
-Keys will be entered in the app under Settings, where they are stored encrypted, never in a file.
+**External APIs:** none are needed for clipping, and none are called until you set one up. Creator Discovery
+needs a free YouTube Data API key of your own, and publishing needs your own developer app and sign-in on each
+platform; the app walks you through both, and [ROADMAP.md](ROADMAP.md) lists exactly what, under "What needs
+you". Keys are entered in the app, where they are stored encrypted, never in a file.
 
 ## 4. Settings file
 
@@ -150,8 +154,34 @@ encoding on the graphics card (NVENC) does not need this script.
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-Runs the fast tests (about a minute) and a type-check of the interface. See [TESTING.md](TESTING.md) for the
-slow tests that use the real speech model.
+Runs the tests that need no speech model (about six and a half minutes on the PC below, most of it real
+renders) and a type-check of the interface. See
+[TESTING.md](TESTING.md) for the slow tests that use the real speech model.
+
+## 8. Optional: Claude and ChatGPT
+
+ClipForge has no AI key of its own. It runs the command-line tools of the plans you already pay for, on this
+PC, and they use your own sign-in.
+
+**Claude** (picks the clips, prompt edits, post text, TikTok captions, YouTube titles):
+
+1. Install [Claude Code](https://claude.com/claude-code).
+2. Open PowerShell, run `claude auth login` and sign in with your Claude account.
+3. Restart ClipForge. **Settings → What works, and what does not yet** shows whether the tool was found, and
+   under **Who picks the clips** you choose the model (Sonnet by default). Whether the sign-in works shows with
+   the first analysis: if it does not, the job says so and the local rules pick.
+
+ClipForge looks for `claude` on PATH and in `%USERPROFILE%\.local\bin`. It starts the tool from an empty
+folder, with none of the tool's own tools switched on, so Claude can only read what ClipForge sends and answer.
+What is sent is listed in [SECURITY.md](SECURITY.md). Each analysis counts against your plan's usage like any
+other use of Claude Code; when the plan's limit is reached, the local rules take over and the job says so.
+
+**ChatGPT** (a second opinion on Claude's picks): install the ChatGPT desktop app, which brings the Codex
+tool, and sign in with your ChatGPT account. Settings lists the models your plan offers. ClipForge uses it
+only with a ChatGPT sign-in, never with an API key.
+
+**Neither:** choose "Local rules only" in Settings. ClipForge's own rules pick the clips and nothing is sent
+anywhere.
 
 ## Where things are kept
 
@@ -160,7 +190,7 @@ slow tests that use the real speech model.
 | Your videos, clips, database, models, logs, encryption key | `data\` (or `CLIPFORGE_DATA_DIR`) |
 | Exported clips | `data\exports\<date>\`, or the folder you set in Settings |
 | Logs | `data\logs\api.log` and `data\logs\worker.log` |
-| Python environment | `backend\.venv`, or `%LOCALAPPDATA%\ClipForge\venv` when the project path is longer than 100 characters. `.venv-path` records which |
+| Python environment | `backend\.venv`, or `%USERPROFILE%\.clipforge\venv` when the project path is longer than 100 characters. `.venv-path` records which |
 
 **Why the environment may live outside the project:** Windows cannot load program libraries from paths longer
 than about 260 characters, even with long paths enabled, and Python packages nest deeply. A short location
@@ -168,7 +198,8 @@ avoids the problem.
 
 **Back up** by copying the `data` folder. **Move** the project by moving the whole folder; the database stores
 paths relative to `data`. Videos you linked from disk (rather than uploaded) stay where they were and must
-stay there. **Uninstall** by deleting the project folder and `%LOCALAPPDATA%\ClipForge`.
+stay there. **Uninstall** by deleting the project folder, `%USERPROFILE%\.clipforge` if it exists, and the
+desktop shortcut.
 
 ## Tested with
 
@@ -192,7 +223,10 @@ PC (no package caches) has not been tried.
 | `[MISSING] FFmpeg was not found` | `winget install Gyan.FFmpeg`, open a **new** terminal, run setup again |
 | `Port 3000 is already in use` | ClipForge is probably already running: open `http://localhost:3000`. Otherwise `scripts\stop.ps1`, or start with `-Port 3100` |
 | `The interface has not been built` | Run `scripts\setup.ps1` (Node.js is needed) |
-| `ImportError` or `DLL load failed`, `The filename or extension is too long` | The Python environment is in too long a path. Delete it, delete `.venv-path`, and run setup again from a shorter project path, or let setup place it in `%LOCALAPPDATA%\ClipForge\venv` |
+| `ImportError` or `DLL load failed`, `The filename or extension is too long` | The Python environment is in too long a path. Delete it, delete `.venv-path`, and run setup again from a shorter project path, or let setup place it in `%USERPROFILE%\.clipforge\venv` |
+| The desktop shortcut shows "ClipForge could not start" | The window says what is wrong (most often setup has not been run, or the port is taken by something else). Fix that and double-click again |
+| A job says Claude is signed out, or was not found | Step 8: `claude auth login` in PowerShell, then restart ClipForge. The clips of that job were picked by the local rules; analyse again for Claude's |
+| Creator Discovery says YouTube does not accept the key | Copy the key again from Google Cloud → APIs & Services → Credentials. A new key can take a few minutes to work, and "YouTube Data API v3" must be enabled for the project |
 | A job fails with "No speech model is installed" | Settings → Speech models → Install, or `scripts\setup.ps1` |
 | Settings shows `cublas64_12.dll is not found` | Normal until step 6 is done. Speech-to-text uses the processor meanwhile |
 | A render fails on the graphics card | ClipForge retries that render on the processor by itself. Settings → Test again shows whether NVENC still passes |

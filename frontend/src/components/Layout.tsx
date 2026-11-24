@@ -12,7 +12,7 @@ import { Badge, Button, Input, Modal, Progress, Spinner, useToast } from "./ui";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, built: true },
   { to: "/clipper", label: "AI Clipper", icon: Sparkles, built: true },
-  { to: "/discovery", label: "Creator Discovery", icon: Compass, built: false },
+  { to: "/discovery", label: "Creator Discovery", icon: Compass, built: true },
   { to: "/library", label: "Clip Library", icon: Library, built: true },
   { to: "/editor", label: "Video Editor", icon: SlidersHorizontal, built: true },
   { to: "/publishing", label: "Publishing Studio", icon: Send, built: true },

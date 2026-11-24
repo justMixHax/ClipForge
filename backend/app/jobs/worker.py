@@ -74,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
 
     last_recovery = 0.0
     last_schedule = 0.0
+    last_discovery = time.monotonic() - 30.0   # first look half a minute after start, then once a minute
     try:
         while not stop.is_set():
             now = time.monotonic()
@@ -93,6 +94,14 @@ def main(argv: list[str] | None = None) -> int:
                         log.info("posts due", extra={"count": due})
                 except Exception:  # noqa: BLE001  (a scheduling hiccup must not stop the worker)
                     log.warning("could not check scheduled posts", exc_info=True)
+            if now - last_discovery > 60:  # followed channels that are due for a look, when you asked for that
+                last_discovery = now
+                try:
+                    from ..discovery.service import enqueue_due as channels_due
+                    with db.session_scope() as s:
+                        channels_due(s)
+                except Exception:  # noqa: BLE001  (the same: never the worker's problem)
+                    log.warning("could not check which followed channels are due", exc_info=True)
             with db.session_scope() as s:
                 job = queue.claim_next(s, worker_id)
                 job_id = job.id if job else None

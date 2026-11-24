@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, Clapperboard, Cpu, Download, Film, HardDrive, Hourglass, Link2Off, Scissors, Sparkles, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, Clapperboard, Compass, Cpu, Download, Film, HardDrive, Hourglass, Link2Off, Scissors, Send, Sparkles, XCircle } from "lucide-react";
 import { logOf, WorkLogLines } from "../components/WorkLog";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -34,6 +34,8 @@ function Meter({ label, value, detail }: { label: string; value: number | null; 
   );
 }
 
+const JOB_TITLE: Record<string, string> = { analyze: "Analysis", import: "Import from a link", moment: "Your own moment", publish: "Post", discover: "Check of followed channels" };
+
 function JobRow({ job }: { job: Job }) {
   const tone = job.status === "succeeded" ? "good" : job.status === "failed" ? "bad" : job.status === "cancelled" ? "neutral" : "accent";
   const took = job.started_at && job.finished_at ? (new Date(job.finished_at).getTime() - new Date(job.started_at).getTime()) / 1000 : null;
@@ -41,10 +43,10 @@ function JobRow({ job }: { job: Job }) {
     <li className="py-2">
       <div className="flex items-center gap-3">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-raised text-faint">
-        {job.type === "analyze" ? <Sparkles className="h-3.5 w-3.5" /> : job.type === "import" ? <Download className="h-3.5 w-3.5" /> : job.type === "moment" ? <Scissors className="h-3.5 w-3.5" /> : <Clapperboard className="h-3.5 w-3.5" />}
+        {job.type === "analyze" ? <Sparkles className="h-3.5 w-3.5" /> : job.type === "import" ? <Download className="h-3.5 w-3.5" /> : job.type === "moment" ? <Scissors className="h-3.5 w-3.5" /> : job.type === "publish" ? <Send className="h-3.5 w-3.5" /> : job.type === "discover" ? <Compass className="h-3.5 w-3.5" /> : <Clapperboard className="h-3.5 w-3.5" />}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] text-ink">{job.type === "analyze" ? "Analysis" : job.type === "import" ? "Import from a link" : job.type === "moment" ? "Your own moment" : "Render"} #{job.id}{job.status === "running" && job.message ? ` · ${job.message}` : ""}</p>
+        <p className="truncate text-[13px] text-ink">{JOB_TITLE[job.type] ?? "Render"} #{job.id}{job.status === "running" && job.message ? ` · ${job.message}` : ""}</p>
         {job.status === "running" ? <Progress value={job.progress} busy className="mt-1" /> : (
           <p className="truncate text-xs text-faint">{job.status === "failed" ? job.error : `${ago(job.finished_at ?? job.created_at)}${took !== null ? ` · took ${duration(took)}` : ""}`}</p>
         )}

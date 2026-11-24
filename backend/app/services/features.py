@@ -74,6 +74,26 @@ def _publishing(session: Session) -> list[dict[str, str]]:
     return items
 
 
+def _discovery(session: Session) -> dict[str, str]:
+    """Creator Discovery counts as working only once YouTube has really answered a check made from this PC."""
+    from ..discovery import service
+    from ..models import Creator
+
+    name = "YouTube creator discovery and watchlists"
+    if not service.has_key(session):
+        return _item("discovery", "Sources", name, "needs_setup",
+                     "Built. Needs a free YouTube Data API key from your own Google Cloud project: Creator "
+                     "Discovery shows the steps. Only the official API is used, with public information.")
+    checked = session.query(Creator).filter(Creator.checked_at.is_not(None)).count()
+    if not checked:
+        return _item("discovery", "Sources", name, "needs_setup",
+                     "A key is stored. Not tried against YouTube yet: follow a channel in Creator Discovery.")
+    return _item("discovery", "Sources", name, "working",
+                 f"Following {session.query(Creator).count()} channel(s) through the official YouTube Data API: "
+                 "new uploads, their public numbers and what their top comments say. A found video is only a "
+                 "suggestion: importing it asks for your right to clip it.")
+
+
 def feature_status(session: Session) -> list[dict[str, Any]]:
     installed = models.installed_models()
     hw = hardware.detect()
@@ -168,8 +188,7 @@ def feature_status(session: Session) -> list[dict[str, Any]]:
                  else "YouTube links will not work until Deno or Node.js 22 or newer is installed "
                       "(winget install DenoLand.Deno); other sites do.")
               if downloader.available() else "The yt-dlp package is missing. Run scripts\\setup.ps1."),
-        _item("discovery", "Sources", "YouTube creator discovery and watchlists", "planned",
-              "Not built. It will use the official YouTube Data API with your own API key."),
+        _discovery(session),
         _item("automation", "Automation", "Automated workflows", "planned",
               "Not built. Batch processing through the queue works today."),
         *_publishing(session),

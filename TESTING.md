@@ -8,15 +8,15 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 958 tests, plus a type-check of the interface. No speech model is needed;
-tests that need FFmpeg are skipped if it is not installed.
+The fast suite: 1,162 tests, about six and a half minutes (most of it real renders), plus a type-check of the
+interface. No speech model is needed; tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 966
-tests, about seven minutes. They need the sample video, which is not kept in Git:
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 1,170
+tests, about eight minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
@@ -25,18 +25,27 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 24 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 1004 passed,
-0 failed, 0 skipped, in 6 minutes 54 seconds.
+**Last full run:** 24 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 1,170 passed,
+0 failed, 0 skipped, in 7 minutes 45 seconds.
+
+**On GitHub:** `.github/workflows/tests.yml` runs the fast suite and builds the interface on every push and
+pull request. It was written before the project had a GitHub repository and has never run; expect to adjust
+it on the first push.
 
 ## How the tests are built
 
-- **Real things, not stand-ins.** Tests that involve video make a small real video with FFmpeg, render it for
-  real and inspect the result: its size, its length, the colour of the first and last frame, where the caption
-  pixels are, how loud the sound is. The API tests run the real application against a temporary database
-  created by the real migrations.
-- **One stand-in, on purpose.** In the fast suite the speech model is replaced by a scripted one that returns
-  a known transcript, so the tests take seconds and the expected result is exact. The slow suite uses the real
-  model.
+- **Real things where they can be.** Tests that involve video make a small real video with FFmpeg, render it
+  for real and inspect the result: its size, its length, the colour of the first and last frame, where the
+  caption pixels are, how loud the sound is. The API tests run the real application against a temporary
+  database created by the real migrations.
+- **Stand-ins only for what a test must not touch.** The speech model is replaced by a scripted one that
+  returns a known transcript, so the fast suite needs no model and the expected result is exact; the slow suite
+  uses the real model. Claude and ChatGPT are replaced by scripted answers: no test ever runs the real tools or
+  uses your plan. YouTube, TikTok and Instagram are replaced by small web servers started on this PC for the
+  test and built from each platform's documentation (`fake_platforms.py`, `fake_youtube_data.py`), so
+  ClipForge's real HTTP code runs against them. A stand-in shows the code does what the documentation says. It
+  cannot show that the documentation matches the real service, which is why those features are listed under
+  "Not tested" until they have met the real thing.
 - **Every test gets its own data folder.** Nothing touches your library, and your `.env` is not read.
 - **Written first where it mattered.** The analysis, caption, queue, security and rendering logic was written
   test-first. The tests added afterwards for parts that already existed found real defects; they are listed
@@ -51,23 +60,30 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 | `test_audio_features.py`, `test_visual_features.py` | 16 | Loudness against the local baseline, silences, loud events, motion, scene cuts; the faster decoding measures the same as full decoding, and a file that refuses it is read in full |
 | `test_captions.py` | 29 | All six styles, emphasis, wrapping and fitting, safe area, hook titles, masking on screen only, SRT and VTT |
 | `test_reframe.py` | 152 | Layout decisions and crop maths for every shape and layout, facecam detection on synthetic frames; the gameplay under the camera leaves out the stream's own facecam in every corner when that costs little, and stays centred when it would cost too much; a split screen of two chosen parts stacks them in equal halves, cropped from their middles; split screen without two faces shows the whole frame rather than a crop around a small face (a profile picture, seen for real), and still crops around one big face |
-| `test_render.py` | 28 | Real renders: every layout at every shape, frame-accurate cuts, joined segments, caption placement and width for every font, silent sources, volume levelling, noise reduction, frame rate, cancellation, failure clean-up |
+| `test_render.py` | 30 | Real renders: every layout at every shape, frame-accurate cuts, joined segments, caption placement and width for every font, silent sources, volume levelling, noise reduction, frame rate, cancellation, failure clean-up; a crop that moves with the person during the render |
+| `test_follow.py` | 19 | Follow the person: a person who stays put gives a camera that never moves, small movements do not move it, a real move is followed slowly and stops on them, a detection that jumps for a moment is ignored, frames without a face hold the camera, the same person is followed from frame to frame, the crop never leaves the picture; a part left out makes the camera cut instead of pan; only the cropped layout is touched, and a restless clip cannot grow an endless FFmpeg expression |
 | `test_qc.py` | 8 | The export checks catch wrong size, wrong length, missing sound, black frames, silence |
-| `test_pipeline.py` | 21 | The whole analyse and render jobs: stored results, re-use of the transcript, re-analysis keeping what you approved, cancellation, missing source, missing model, render failure, fallback from graphics card to processor, pause on shutdown; every render makes a thumbnail, a thumbnail that cannot be made never costs the clip, a title the fonts cannot draw gives a thumbnail without words and the log says so, a render still lands while the old video is open in the browser, subtitles switched off are left out while the hook title stays, and with both off nothing is burned in; parts left out are cut from the render, and its thumbnail is never taken from them |
+| `test_pipeline.py` | 41 | The whole analyse and render jobs: stored results, re-use of the transcript, re-analysis keeping what you approved, cancellation, missing source, missing model, render failure, fallback from graphics card to processor, pause on shutdown; every render makes a thumbnail, a thumbnail that cannot be made never costs the clip, a title the fonts cannot draw gives a thumbnail without words and the log says so, a render still lands while the old video is open in the browser, subtitles switched off are left out while the hook title stays, and with both off nothing is burned in; parts left out are cut from the render, and its thumbnail is never taken from them. With Claude as the engine (a stand-in answers): its picks are saved with its words, the local rules take over when it cannot be reached; the moments viewers wrote in the comments reach Claude and show on the clip, also with the local rules, and never for a video that was not found through Creator Discovery; hints that cannot be read never cost you the clips |
 | `test_queue.py` | 14 | Claiming, progress, heartbeat, cancel, retry, recovery of interrupted jobs, attempt limit |
-| `test_api.py`, `test_api_library.py` | 68 | Upload and its rejections, linking from disk, playback with seeking, clips, captions, feedback, batch actions, manual order, variants, caption files, post text, export, projects, cleanup, storage, settings, search, cross-site and wrong-host requests, persistence across a restart, honest feature status (today's features included) |
+| `test_api.py`, `test_api_library.py` | 77 | Upload and its rejections, linking from disk, playback with seeking, clips, captions, feedback, batch actions, manual order, variants, caption files, post text, export, projects, cleanup, storage, settings, search, cross-site and wrong-host requests, persistence across a restart, honest feature status (today's features included); a part of the picture chosen for a layout must lie inside the video; clips listed by the kind of moment they are |
+| `test_migrations.py` | 7 | The database: the migrations build exactly the tables the models describe; every table whose ids must never be reused is built that way on a fresh install, keeps the rule when a change is rolled back, and a database that lost the rule gets it back with every clip intact |
 | `test_presets.py` | 17 | Your own presets: saved, listed by name, removed; saving under the same name (whatever its capitals) updates it; options left out get the usual ones; a preset that would not work (an unknown style, layout, shape, game or length, a number out of range, an unknown option) is refused; a name is needed and short; at most fifty |
 | `test_answers.py` | 20 | Reading an AI's answer, with Claude's two real answers that were lost before: a draft followed by "Correction, here is the real answer" (the correction is used), times written as a clock (read as seconds), braces in the text around the answer; a clock inside a sentence is never touched; the same reading for ChatGPT's opinion, the post text and the prompt edit |
-| `test_downloader.py`, `test_import.py` | 69 | Importing from a link, with the real downloader against a web site started on this PC for the test: download, progress, cancel, size limit, missing video, page without a video, unreachable site; which links are accepted; failures explained in plain words; the import job with source and rights stored, duplicates, disk-space check, pause and resume; the API refusing to start without a stated right to clip |
+| `test_downloader.py`, `test_import.py` | 73 | Importing from a link, with the real downloader against a web site started on this PC for the test: download, progress, cancel, size limit, missing video, page without a video, unreachable site; which links are accepted; a warning when a link only offers a poor picture; failures explained in plain words; the import job with source and rights stored, duplicates, disk-space check, pause and resume; the API refusing to start without a stated right to clip |
+| `test_discovery_signals.py` | 75 | What Creator Discovery reads out of public data, as plain functions: a channel link, @handle, id or video link is told apart from a name and from what is not YouTube at all; lengths and dates as YouTube writes them; YouTube's day for the quota, which follows Pacific time through the year; which comments are laughing; the times viewers wrote down (a chapter list and times past the end are left out), grouped when they are seconds apart; a comment cut to one short line without control characters; how a video's views compare with the channel's usual, only when there are enough videos to compare |
+| `test_discovery_api_client.py` | 20 | The YouTube Data API client against a stand-in built from the documentation and from the real API's own refusals: a test without the stand-in cannot reach the real YouTube (the whole test run points the client at an address on this PC where nothing listens); the key travels in a header and never in the address; channels by id, handle and old user name; uploads newest first; videos fifty at a time; a stream still live has no length; top comments with their likes; comments switched off is not an error; every request's cost is counted; a wrong key, no key, a used-up quota, an API not switched on and a restricted key each say what to do; a fault on YouTube's side can be tried again |
+| `test_discovery.py` | 49 | Creator Discovery through the API and the job: nothing is asked of YouTube without a key; the key is stored encrypted and never comes back; a channel is found from its link for one unit and a name is only searched for when you ask (100 units); following takes a first look; the list leaves out Shorts and can be ordered by what the public data says; comments are counted, not guessed; your right to clip a creator is a record you keep; a found video is not imported until you say why you may clip it, never from a creator marked "not allowed" (a right named for that one video does not get around it), never while it is still live and never twice; unfollowing forgets what was found but keeps your library; what YouTube has not confirmed for thirty days is not kept; when the quota runs out half-way, what was read is kept; a refused key stops the job and pauses the automatic checks; channels are looked at by themselves only when due, and asking for every channel is never answered with a check of the due ones only; nothing that stops a check is tried again a minute later: an answer that cannot be read stays with its channel while the others are still looked at, and a key this PC cannot read or a fault nobody expected pauses the checks by themselves until a look works again; after the data folder moved to another PC the key can simply be entered again; kept comments in a shape nobody expects still list and are read afresh; the quota count starts again with YouTube's day; the feature counts as working only after YouTube really answered |
 | `test_timecode.py`, `test_moments.py` | 70 | Clips from your own timestamps: times typed in every common way or pasted as a link shared at a moment (a link to another video is refused); your start kept, or moved a fraction of a second when it would chop a word, never leaving less than a second of clip; the end from you, from Claude or from the local rules, always inside your length; Claude's name and score; ChatGPT's verdict without additions; the transcript reused; the render queued; the work log; Claude's thumbnail words and TikTok caption for your moment |
 | `test_publishing_adapters.py` | 29 | YouTube, TikTok and Instagram against stand-ins of their APIs built from the documentation: sign-in with PKCE (checked against the standard's own example), token renewal, a resumable upload that continues after a break, a retried post that resumes instead of uploading twice, TikTok's chunk rules, a Reel never published twice, quota and refusal messages |
-| `test_publishing_service.py`, `test_publishing_api.py` | 46 | The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; date ranges by when a post goes live; Claude's post text; honest feature status and dashboard numbers |
-| `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 50 | File-name and path safety, encrypted credentials, masking of credentials in logs, a connection the browser dropped is not logged as an error (anything else still is), where the server listens and how it stops; the Shut down button stops a real running server in order, says so when it cannot, and another website cannot press it |
-| `test_claude_review.py` and the Claude tests in `test_pipeline.py` | 24 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained, and the local rules take over when Claude cannot be reached; the thumbnail words, TikTok caption and hashtags Claude writes are asked for, cleaned (no emoji, one line, safe hashtags, a number sign before a number kept) and go with the clip; pictures go with a request as images in the tool's stream-json input with no tools switched on, and the answer is read from the stream |
+| `test_publishing_service.py`, `test_publishing_api.py` | 47 | After the data folder moved to another PC the page still opens, says the stored sign-in cannot be read, and the app can be entered again (the old key file is put aside, not deleted). The queue's safeguards (approved, rendered, right to post recorded, no second copy without asking, the daily limit, each platform's rules, a time in the future), the scheduler, the job end to end with the stand-ins, renewal before posting, reconnect, two retries then failure, a failure that is never retried by itself, TikTok drafts confirmed later, cancel, retry, remove; app secrets and tokens stored encrypted and never returned; a sign-in that works once; a sign-in not started in ClipForge refused; Google's return to the home page passed on; date ranges by when a post goes live; Claude's post text; honest feature status and dashboard numbers |
+| `test_paths.py`, `test_secrets.py`, `test_logging.py`, `test_serve.py` | 51 | File-name and path safety, encrypted credentials, masking of credentials in logs, a connection the browser dropped is not logged as an error (anything else still is), OpenCV reports only its errors, where the server listens and how it stops; the Shut down button stops a real running server in order, says so when it cannot, and another website cannot press it |
+| `test_repo_hygiene.py` | 3 | What goes into the repository is fit to be public: no file names a folder on the PC it was written on, nothing that holds secrets or your own data is tracked, and the settings template holds no secret |
+| `test_claude_review.py` | 26 | Claude as the engine, with a stand-in for the Claude Code tool (the real one is never called by tests): the prompt holds the timed transcript and the rules, the tool runs with no tools of its own, answers are read even with text around them, picks are widened to whole sentences and de-duplicated, sign-out and plan-limit failures are explained; the thumbnail words, TikTok caption and hashtags Claude writes are asked for, cleaned (no emoji, one line, safe hashtags, a number sign before a number kept) and go with the clip; pictures go with a request as images in the tool's stream-json input with no tools switched on, and the answer is read from the stream; moments viewers wrote in the comments are given as hints that are never instructions, and are not mentioned when there are none |
 | `test_chatgpt_review.py` | 41 | ChatGPT as the second opinion, with a stand-in for the Codex tool: verdicts and additions read even with text around them, odd answers ignored or refused cleanly, failures explained (a model the plan does not offer is named; a reached limit says when ChatGPT works again), the prompt holds the transcript and the numbered picks, the tool is read-only with tools and web search off, uses your ChatGPT sign-in and never an API key, only a real program is run, model names are checked, verdicts are recorded on each clip, at most two new moments are added and only inside your length; an addition comes with thumbnail words, a caption and hashtags too |
-| `test_thumbnail.py`, `test_covers.py`, `test_post_text.py` | 39 | Thumbnails: the words come from the clip's own line in any script (filler and a repeated phrase left out, ending on a real word; a price or the last real word in colour), words you type become one short line without emoji; words no font here can draw properly are left off rather than shown as boxes, and refused when typed; one long word is made smaller until it fits; the words sit under the camera or out of the way of a face, inside the edges and above TikTok's buttons; the moment chosen is sharp and lit, and never from a part left out; the picture is framed like the clip; a picture being sent to the browser is replaced once it is free. Through the API: shown and downloaded, words, colour and moment changed, a moment outside the clip refused, kept for the render before one, copied by export. The TikTok caption is the words, the credit and the hashtags; emojis can be taken out of a caption |
+| `test_thumbnail.py`, `test_covers.py`, `test_post_text.py` | 41 | Thumbnails: the words come from the clip's own line in any script (filler and a repeated phrase left out, ending on a real word; a price or the last real word in colour), words you type become one short line without emoji; words no font here can draw properly are left off rather than shown as boxes, and refused when typed; one long word is made smaller until it fits; the words sit under the camera or out of the way of a face, inside the edges and above TikTok's buttons; the moment chosen is sharp and lit, and never from a part left out; the picture is framed like the clip; a picture being sent to the browser is replaced once it is free. Through the API: shown and downloaded, words, colour and moment changed, a moment outside the clip refused, kept for the render before one, copied by export. The TikTok caption is the words, the credit and the hashtags; emojis can be taken out of a caption |
+| `test_youtube_text.py` | 9 | A YouTube title and description written by Claude (a stand-in answers): with the credit, #Shorts and hashtags, or without emojis and hashtags; a new one is asked to differ from the one in the box; a long title is cut to what YouTube takes, angle brackets are taken out, a title of only hashtags falls back to the clip's own; nothing is sent with "Local rules only"; when Claude cannot write one it says why |
 | `test_tiktok_caption.py` | 9 | The TikTok caption: Claude rewrites it from what is said (a stand-in answers), with or without emojis and hashtags, and emojis or hashtags it adds anyway are taken out when not wanted; the credit stays, on a line of its own, and so does the creator's hashtag; nothing is saved until you save; your own caption is kept exactly as written and used in the post text; an empty one goes back to the automatic caption; one longer than 4,000 characters is refused; Claude signed out or switched off is explained |
-| `test_prompt_edit.py` | 52 | The prompt edit, with a stand-in for Claude: the request shows Claude what you wrote, the clip as it is, its timed words (both source and clip times) and what can be changed, and a long transcript is cut down from the far ends; answers are read even with text around them, and one that cannot be read is an error, not a guess. Every change is checked: a new cut never falls inside a word (it moves to the word's nearer edge), stays inside the video and at least a second long; times are read as seconds or as a clock; parts left out stay inside the cut, are merged, can all be put back, and never leave less than a second; subtitle sizes are kept within range, unknown fonts and colours that are not #RRGGBB are refused with the reason, fonts are found whatever their capitals, a style chosen by its name starts from that style; hook text, timing and switch; layout, shape, zoom, subject, sound, pauses, title and thumbnail words and moment; what ClipForge cannot do is reported; asking for what the clip already has changes nothing; the clip given is never changed in place; subtitles edited by hand are reset by a new cut, which says so; word corrections whatever their capitals, keeping the punctuation. Through the API: the clip is changed and rendered again, the copy for undo stays out of the responses, undo puts it back and renders again, there is nothing to undo before an edit, nothing is rendered when nothing changed, a word fix reaches the subtitles, a clip being rendered is left alone, nothing is sent to Claude when it is switched off, empty and very long requests are refused, a signed-out Claude leaves the clip as it was, and parts left out are stored with the clip and checked, stay inside it whenever it is trimmed, and a trim that would leave only them is refused. With the picture: two parts go on top and below in a split screen (from a list or named numbers), a part off the picture is kept inside it, a split screen needs both parts and a tiny one is refused (nothing half done), parts are only kept for the stacked layouts, parts need the picture; the picture sent is the frame most like the rest of the clip; frames across the clip are shown together with their times; a part is moved onto the camera's own edges, also when the camera moves during the clip (inside it in every frame), but not onto a line inside the picture (a door frame, seen for real), and a side drawn at the picture's edge stays there; through the API, two JPEGs and the frame's size go with the request |
+| `test_prompt_edit.py` | 54 | The prompt edit, with a stand-in for Claude: the request shows Claude what you wrote, the clip as it is, its timed words (both source and clip times) and what can be changed, and a long transcript is cut down from the far ends; answers are read even with text around them, and one that cannot be read is an error, not a guess. Every change is checked: a new cut never falls inside a word (it moves to the word's nearer edge), stays inside the video and at least a second long; times are read as seconds or as a clock; parts left out stay inside the cut, are merged, can all be put back, and never leave less than a second; subtitle sizes are kept within range, unknown fonts and colours that are not #RRGGBB are refused with the reason, fonts are found whatever their capitals, a style chosen by its name starts from that style; hook text, timing and switch; layout, shape, zoom, subject, sound, pauses, title and thumbnail words and moment; what ClipForge cannot do is reported; asking for what the clip already has changes nothing; the clip given is never changed in place; subtitles edited by hand are reset by a new cut, which says so; word corrections whatever their capitals, keeping the punctuation. Through the API: the clip is changed and rendered again, the copy for undo stays out of the responses, undo puts it back and renders again, there is nothing to undo before an edit, nothing is rendered when nothing changed, a word fix reaches the subtitles, a clip being rendered is left alone, nothing is sent to Claude when it is switched off, empty and very long requests are refused, a signed-out Claude leaves the clip as it was, and parts left out are stored with the clip and checked, stay inside it whenever it is trimmed, and a trim that would leave only them is refused. With the picture: two parts go on top and below in a split screen (from a list or named numbers), a part off the picture is kept inside it, a split screen needs both parts and a tiny one is refused (nothing half done), parts are only kept for the stacked layouts, parts need the picture; the picture sent is the frame most like the rest of the clip; frames across the clip are shown together with their times; a part is moved onto the camera's own edges, also when the camera moves during the clip (inside it in every frame), but not onto a line inside the picture (a door frame, seen for real), and a side drawn at the picture's edge stays there; through the API, two JPEGs and the frame's size go with the request |
 | `test_ffmpeg_service.py`, `test_hardware.py` | 17 | Probing, progress, error reporting, encoder tests, the graphics card is only recommended after passing its test; frames read a few times a minute show the picture of the time asked for |
 | `test_transcribe_real.py` (slow) | 7 | The real speech model on the sample: key phrases heard, at least 90% of the scripted words, word times within half a second, faster than real time. One test repeats it on the graphics card (same words, at least 10× real time) and is skipped where no usable graphics card is found |
 | `test_pipeline_real.py` (slow) | 1 | The acceptance test below |
@@ -112,6 +128,34 @@ Also asked for: **cancellation** (`test_cancelling_during_analysis_*`, `test_can
 **FFmpeg errors** (`test_a_failed_render_raises_and_leaves_no_file_behind`), **AI failures**
 (`test_a_missing_speech_model_fails_with_instructions`, the resume-after-failure tests in `test_transcribe.py`).
 
+## Creator Discovery, 24 November 2026
+
+**The real YouTube API, without a key.** No key is stored on the author's PC, so no real request for data has
+been made. What was asked of the real API is how it refuses: with no key it answers 403 "Permission denied on
+the service", and with a made-up key 400 "API key not valid". Both answers were copied into the stand-in, so
+ClipForge's messages for them are tested against YouTube's own words.
+
+**In the browser, against the stand-in**, in a copy of ClipForge with its own empty data folder: the set-up
+steps shown while no key is stored; saving a key and **Try the key**; finding a channel from its link and from
+its @handle (1 unit, counted on the page); **Follow**, and the first look at its uploads; the list with a
+stream marked as still live, a video that stands out, the count of laughing comments and the moments viewers
+wrote down; **Import and find clips**, which asked for the right to clip first, queued the import, and
+remembered the right for the creator when asked to; **Hide**; a check of every channel waiting in the queue;
+removing the key, after which the followed channel and its videos stayed on the page under the set-up steps;
+the Clip Library opening with its kind-of-moment filter set from a link; and the page at phone width without
+sideways scrolling.
+
+Not done: a check of a real channel, the quota counted against Google's own count, and a full import of a
+found video (the copy ran without a worker, so the import stayed queued). Those need a real key and are the
+first things to try with one.
+
+**The author's own ClipForge, upgraded.** With no job running, the database was copied with SQLite's own
+backup, ClipForge was stopped and started again from its desktop shortcut, and migrations 0006 and 0007 ran at
+start. Every table was then compared with the copy: all identical (10 clips, 13 videos, 158 jobs, 19,028
+transcript lines), two new empty tables, and the clips table has its rule back, with the counter at the
+highest id. The real Creator Discovery page showed the set-up steps (no key is stored there), and the Clip
+Library, opened with the kind-of-moment filter in the link, showed the 4 funny clips of the 10.
+
 ## Checked by hand, in the browser, on 21 November 2026
 
 Uploading a real file by a scripted drop onto the page (a real mouse drag from Explorer cannot be automated,
@@ -138,7 +182,7 @@ own folder, `setup.ps1`, `start.ps1`, `stop.ps1` and `test.ps1 -All` were run ag
 
 ## Claude on a real stream, 22 November 2026
 
-The user's 37-minute stream "I lost my cool on this fool" (real bail-bond footage, 3,929 spoken words).
+A 37-minute stream, "I lost my cool on this fool" (real bail-bond footage, 3,929 spoken words).
 With the local rules, its 4 clips missed every funny moment. With Claude (Sonnet) as the engine the
 analysis took 23 seconds, 18 of them Claude's review, and gave 6 clips, all of them funny bits with a
 correct reason each: the "Girl Scouts" fake-name exchange (86), "Welcome to the Krusty Krab" (82), the
@@ -185,8 +229,14 @@ of the fixed version found 11 narrower points; 10 were fixed the same way and on
 because the ChatGPT plan no longer offered Astra that day; it found 3 real problems (1 serious), all fixed with
 tests. A review of the thumbnails (23 November, gpt-5.6-terra) found 2 problems: a title in another script lost
 all its words and got English ones instead, and one very long typed word could run off the picture. Both were
-fixed with tests. Since then this PC is signed in to a ChatGPT Go account, which does not include Astra either: code reviews
-use gpt-5.6-terra (the script's default now) and ClipForge's second opinion uses gpt-6-luna.
+fixed with tests. Since then the author's PC is signed in to a ChatGPT plan that does not include Astra either: code reviews
+use gpt-5.6-terra (the script's default now) and the second opinion there uses gpt-6-luna.
+
+A review of Follow the person (24 November) found 2 problems, both fixed with tests. A review of Creator
+Discovery and the rest of that day's changes (24 November, gpt-5.6-terra) found 2 more, both fixed with tests.
+A second review of the fixed version could not run: that plan's allowance for Codex was used up (Codex said
+until 24 December). What was changed after the first review, listed in the table of defects below, has
+therefore been checked by the tests only, not by a second reader.
 
 ## Thumbnails on real clips, 23 November 2026
 
@@ -232,6 +282,16 @@ Kept here because a test suite that never finds anything proves little.
 | Thumbnails on real clips | The frame reader handed over each sampled frame half a sampling interval late, so a thumbnail could show a different moment than the one the picker scored | Yes, with a test |
 | Pressing Render again while the clip played in the browser | Windows refused to replace the video file in use, and the render failed at the very end | Yes, with a test: the new video takes a name of its own |
 | Real-model transcription test | The speech model occasionally returns a word with no duration or one stretched across a pause | Yes: word times are corrected against the audio |
+| ChatGPT's review of Follow the person (24 November) | The thumbnail's best moment was scored on the fixed crop although the camera had moved; a prompt edit could say the camera now follows the person in a layout where the render does not do it | Yes, each with a test |
+| Looking at the database before adding tables to it (24 November) | Rolling a change back had rebuilt the `clips` table without the rule that an id is never used twice, so the id of a deleted clip could have gone to a new one, and with it the old clip's place in posts and jobs | Yes, with tests: a migration puts the rule back where it is missing and keeps every clip, and rolling back now keeps the rule. Tried first on a copy of a real database: every table came out identical |
+| Writing the YouTube client against the real API's refusals | A refusal for one video ("comments are switched off") arrives with the same status as a refused key, and would have been reported as a problem with the key | Yes: the particular reason is read before the general status, and the stand-in now sends those statuses |
+| Double-clicking the desktop shortcut on the author's PC | Nothing happened. The Python environment had ended up where a program started from the desktop could not see it, and the minimised start window closed before the reason could be read | Yes: the environment now lives in the project (or in the user's own folder when the path is long), and a start from the shortcut shows a problem in a small window; seen for real with the port taken |
+| Looking at the Creator Discovery page in the browser | With the key removed, the channels already followed and their videos disappeared from the page | Yes: they stay, under the set-up steps |
+| Looking at the Dashboard with a publishing job on it | The job was labelled "Render" | Yes: every kind of job has its own label |
+| ChatGPT's review of Creator Discovery (24 November) | A creator marked "not allowed" could still be imported from by naming a right for that one video in a direct request (the page itself kept its button switched off); pressing "check for new videos" while a check of only the due channels was waiting got that smaller check | Yes, with four tests: the creator's record comes first, and a waiting check of the due channels becomes a check of all (one that has started gets a full one queued behind it) |
+| Reading the new code again after that review | A check that failed before reaching a channel was queued again every minute, for as long as ClipForge ran: a stored key that could not be read, or an answer from YouTube in a shape the code did not expect. Comments kept in an unexpected shape broke the list, and as a hint cost the whole analysis | Yes, with six tests: an answer that cannot be read stays with its channel, anything that stops a whole check pauses the checks by themselves, and a hint that cannot be read is left out |
+| Thinking a restored backup through | After the data folder moved to another PC or Windows account (or Windows was installed again), the key file could not be opened: saving any key again failed with a server error, and the Publishing Studio did not open | Yes, with two tests that use a key file Windows really refuses: saving a credential puts the old key file aside and starts a new one, the page opens and shows the app as not set up, and anything else says the stored sign-in cannot be read here and has to be entered again |
+| A new test failing with YouTube's real refusal | The test undid more than its own fault and with it the stand-in's address, so one request with a made-up key went to the real API (which refused it) | Yes: the test run now points the client at an address on this PC where nothing listens, for the whole run, so no test can reach the real API whatever it undoes; one test proves it |
 
 ## Not tested
 
@@ -241,15 +301,21 @@ Kept here because a test suite that never finds anything proves little.
   open: whether Google accepts the bare return address `http://127.0.0.1:3000` for your Desktop client as its
   examples show (ClipForge uses exactly that form), and whether TikTok's sandbox delivers drafts to your own
   account before TikTok has reviewed your app.
-- **Real streams.** One real video has been through it: Blender's film Sintel (Creative Commons), imported
-  from its YouTube link on 21 November 2026 through the interface. It downloaded in about 8 seconds at 720p,
-  was transcribed correctly, and gave two sensible clips that rendered and passed every check, but they
-  scored 44 and 41, under the default minimum of 55. After the engine learned to use the stretches with
-  almost no speech, the same film also gave its three action scenes (55 to 56, low confidence). No real stream, podcast or gameplay recording has been
-  tried, so the quality of the suggestions and of the automatic framing on that kind of content is unknown.
+- **Creator Discovery against the real YouTube API.** No key is stored, so it has never fetched a real
+  channel, video or comment. It follows the API's documentation as it stood in November 2026 and passes
+  against a local stand-in; the first check of a real channel is the real test. Open until then: whether the
+  units ClipForge counts match what Google's console shows, and how well "laughing" comments and written-down
+  times point at funny moments on real channels (the counting is tested; what it is worth is not).
+- **The workflow on GitHub.** `.github/workflows/tests.yml` has never run.
+- **A first install on another PC.** Everything here ran on the author's PC. `setup.ps1` was run there over an
+  existing install and creating a fresh Python environment, never on a PC that had none of it.
+- **Real streams: a handful.** The local rules were tuned on a synthetic sample. Since then a few real streams
+  of up to two hours have been through it with Claude as the picker (see the sections above), and their clips
+  were watched. That is a handful of videos from a few creators, all in English: enough to find defects, not
+  enough to say how good the picks are in general. Podcasts and interviews have not been tried.
 - **Links other than YouTube.** Twitch and Kick links have not been tried.
-- **Long videos.** The longest video processed was 15 minutes. Hour-long recordings exercise the same code
-  (transcription works in 5-minute windows) but have not been run.
+- **Videos longer than about two hours.** Transcription works in 5-minute windows, so longer ones exercise the
+  same code, but none has been run.
 - **Other graphics cards and larger speech models.** Speech-to-text on the graphics card was tested with
   `small.en` on an RTX 3060 only.
 - **Languages other than English**, and the larger speech models.
@@ -259,4 +325,4 @@ Kept here because a test suite that never finds anything proves little.
 - **Other PCs.** One machine, Windows 11, Windows PowerShell 5.1. Not tried on Windows 10 or without an NVIDIA
   card (the tests do run with a "no graphics card" hardware report).
 - **Uploads of many gigabytes.** The size limit is tested with a lowered limit, not with a 20 GB file.
-- **Publishing, discovery, analytics.** Not built, so there is nothing to test.
+- **Analytics, the AI strategist and automation rules.** Not built, so there is nothing to test.

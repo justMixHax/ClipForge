@@ -52,11 +52,15 @@ def _cuts_ok(value: Any) -> bool:
 
 def _box_ok(value: Any) -> bool:
     return value is None or (isinstance(value, (list, tuple)) and len(value) == 4
-                             and all(isinstance(v, (int, float)) and v >= 0 for v in value) and value[2] > 0 and value[3] > 0)
+                             and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 for v in value)
+                             and value[2] > 0 and value[3] > 0)
 
 
-def merge_settings(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """Apply a partial change to a clip's edit settings, rejecting values the renderer would not accept."""
+def merge_settings(current: dict[str, Any], patch: dict[str, Any],
+                   frame: tuple[int, int] | None = None) -> dict[str, Any]:
+    """Apply a partial change to a clip's edit settings, rejecting values the renderer would not accept. frame:
+    the source video's width and height, so a part of the picture sent with this change must lie inside it (a
+    part saved earlier is left as it is, so it never blocks an unrelated change)."""
     unknown = set(patch) - TOP_LEVEL
     if unknown:
         raise ClipForgeError(f"Unknown edit setting: {', '.join(sorted(unknown))}")
@@ -84,6 +88,12 @@ def merge_settings(current: dict[str, Any], patch: dict[str, Any]) -> dict[str, 
         fail("Zoom must be between 1 and 3")
     if not _box_ok(merged.get("facecam_box")) or not _box_ok(merged.get("gameplay_box")):
         fail("A box must be four numbers: x, y, width, height")
+    if frame is not None and frame[0] > 0 and frame[1] > 0:
+        for key in ("facecam_box", "gameplay_box"):
+            box = patch.get(key)
+            if box and (box[0] + box[2] > frame[0] + 1 or box[1] + box[3] > frame[1] + 1):
+                fail(f"That part of the picture reaches past the edge of the video (the picture is "
+                     f"{frame[0]}×{frame[1]}). Draw it inside the picture.")
     if not isinstance(merged.get("follow", False), bool):
         fail("Following the person is either on or off")
     if not _cuts_ok(merged.get("cuts")):
@@ -140,6 +150,7 @@ def clip_words(session: Session, clip: Clip) -> list[CaptionWord]:
 @router.get("", response_model=ClipList)
 def list_clips(video_id: int | None = None, project_id: int | None = None, review_status: str | None = None,
                render_status: str | None = None, favorite: bool | None = None, origin: str | None = None,
+               category: str | None = Query(None, max_length=40),
                q: str | None = Query(None, max_length=200), min_score: float | None = None,
                sort: str = Query("score", pattern="^(score|rank|newest|oldest|duration|source)$"),
                limit: int = Query(200, ge=1, le=500), offset: int = Query(0, ge=0),
@@ -157,6 +168,8 @@ def list_clips(video_id: int | None = None, project_id: int | None = None, revie
         query = query.where(Clip.favorite == favorite)
     if origin:
         query = query.where(Clip.origin == origin)
+    if category:  # the kind of moment: funny, hype, rage… (the keys of scoring.CATEGORY_LABELS)
+        query = query.where(Clip.category == category)
     if min_score is not None:
         query = query.where(Clip.score >= min_score)
     if q:
@@ -278,7 +291,7 @@ def update_clip(clip_id: int, body: ClipPatch, session: Session = Depends(get_db
     if "manual_rank" in sent:
         clip.manual_rank = body.manual_rank
     if "settings" in sent and body.settings is not None:
-        clip.settings = merge_settings(clip.settings, body.settings)
+        clip.settings = merge_settings(clip.settings, body.settings, frame=(video.width, video.height))
     _keep_cuts_inside(clip)
     if "captions" in sent:
         clip.captions = None if body.captions is None else validate_captions(body.captions, clip.end - clip.start)

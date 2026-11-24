@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, query } from "./api";
 import type {
-  Clip, ClipList, Dashboard, Feature, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PromptEditResult,
+  Clip, ClipList, Dashboard, DiscoveryOverview, Feature, FoundVideo, HardwareReport, Job, LiveStats, NotificationItem, Options, Project, PromptEditResult,
   PublishOverview, PublishPost, SavedPreset, SettingsBody, Video,
 } from "./api";
 
@@ -9,7 +9,7 @@ import type {
 export function useRefreshAll() {
   const client = useQueryClient();
   return () => {
-    for (const key of ["videos", "video", "clips", "clip", "projects", "dashboard", "jobs", "notifications"]) {
+    for (const key of ["videos", "video", "clips", "clip", "projects", "dashboard", "jobs", "notifications", "discovery", "discovery-videos"]) {
       client.invalidateQueries({ queryKey: [key] });
     }
   };
@@ -48,6 +48,7 @@ export type ClipFilters = {
   favorite?: boolean;
   q?: string;
   min_score?: number;
+  category?: string;
   sort?: string;
 };
 
@@ -170,4 +171,37 @@ export function usePosts() {
     queryFn: () => api.get<PublishPost[]>("/publishing/posts"),
     refetchInterval: (state) => ((state.state.data ?? []).some((post) => MOVING.has(post.status)) ? 2000 : 8000),
   });
+}
+
+// ----------------------------------------------------------------------------------- creator discovery
+export function useDiscovery() {
+  return useQuery({
+    queryKey: ["discovery"],
+    queryFn: () => api.get<DiscoveryOverview>("/discovery"),
+    refetchInterval: (state) => (state.state.data?.checking ? 1500 : 15000),
+  });
+}
+
+export type FoundVideoFilters = { creator_id?: number; show: string; sort: string; min_minutes: number };
+
+/** The uploads found on the channels you follow. Polled faster while one of them is being imported or analysed. */
+export function useFoundVideos(filters: FoundVideoFilters, enabled = true) {
+  return useQuery({
+    queryKey: ["discovery-videos", filters],
+    queryFn: () => api.get<FoundVideo[]>(`/discovery/videos${query(filters)}`),
+    enabled,
+    refetchInterval: (state) => ((state.state.data ?? []).some((v) => v.importing || v.library?.status === "analyzing") ? 2000 : 20000),
+  });
+}
+
+/** The clipping options a video gets when nothing else is chosen: the defaults saved in Settings. */
+export function analyzeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  return {
+    content_preset: String(values["clips.content_preset"] ?? "auto"), game_style: String(values["clips.game_style"] ?? ""),
+    count: Number(values["clips.count"] ?? 5), length: String(values["clips.length"] ?? "15-60"),
+    min_score: Number(values["clips.min_score"] ?? 55), aspect: String(values["clips.aspect"] ?? "9:16"),
+    layout: String(values["clips.layout"] ?? "auto"), captions: String(values["clips.captions"] ?? "opus"),
+    quality: String(values["processing.priority"] ?? "balanced"), auto_render: Boolean(values["clips.auto_render"] ?? true),
+    show_hook: Boolean(values["clips.show_hook"] ?? true), remove_silence: false,
+  };
 }

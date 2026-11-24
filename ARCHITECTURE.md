@@ -29,9 +29,10 @@ parts fit together, what happens when you press **Generate Clips**, and why it w
   mode with a busy timeout, so the two processes do not block each other.
 - **One job at a time.** A single worker keeps the graphics card and processor from being oversubscribed.
   Manual render requests jump the queue by priority.
-- **Nothing leaves the PC.** The only network activity is what you start yourself: importing a video from a
-  link, installing a speech model
-  from Settings, and the setup and font scripts.
+- **The network is used only for what you set up.** Clipping a file needs none. Claude and ChatGPT are
+  reached through their own command-line tools and your own sign-in; link imports, Creator Discovery and
+  publishing talk to the sites and accounts you chose. Source videos are never uploaded.
+  [SECURITY.md](SECURITY.md) lists every case and what is sent.
 
 ## What happens when you press Generate Clips
 
@@ -85,7 +86,9 @@ widened to whole sentences, de-duplicated, given the local 12-part breakdown for
 Claude's title, hook, score and reason (`analysis_source = "claude"`), plus the words for its thumbnail (and
 which one to colour), a TikTok caption and hashtags, all cleaned before use: at most 40 characters without
 emoji on the thumbnail, a caption of one line without hashtags, and at most eight safe hashtags. If the tool is missing, signed out or
-over the plan's limit, the local picks are saved and the job says why.
+over the plan's limit, the local picks are saved and the job says why. For a video found through Creator
+Discovery, the request also holds the moments its viewers wrote down in the comments, as hints (see "Creator
+Discovery" below).
 
 **Reading an AI's answer** (`analysis/answers.py`, used for Claude's picks, ChatGPT's opinion, the post text and
 the prompt edit): every JSON block in the answer is found, the last one first, because a correction comes after
@@ -152,8 +155,9 @@ model nobody can inspect. It lives in `backend/app/analysis/`.
 7. **Explaining.** Every suggestion stores the evidence behind each sub-score, which is what the "Why this
    score" panel shows.
 
-**Confidence** reflects how much the signals agree and how much speech there was. It is capped at 0.74 while
-no language model reviews the candidates. **Where almost nothing is said** (`_action_highlights` in `engine.py`): if the spoken moments do not fill
+**Confidence**, for the local rules, reflects how much the signals agree and how much speech there was, and
+is capped at 0.74. A pick by Claude is stored with 0.8 and an addition by ChatGPT with 0.7: fixed values that
+say where a pick came from, not measurements. **Where almost nothing is said** (`_action_highlights` in `engine.py`): if the spoken moments do not fill
 the number of clips asked for, peaks of loudness and picture activity fill the rest. Such a clip may be at
 most a quarter talk, is not looked for where people are mostly talking, keeps a short remark at its edge
 whole and leaves a longer sentence out, and never overlaps a spoken pick. It is marked "signals only", with
@@ -175,7 +179,8 @@ non-text signals, with lower confidence.
 - **Masking swear words** applies to burned-in text only. Transcripts, SRT and VTT files are always word for
   word.
 - **Layouts**: fill (crop around the subject), blurred background, facecam above gameplay, split, or automatic
-  from what the face detector finds. The crop is fixed for the whole clip.
+  from what the face detector finds. The crop is fixed for the whole clip, unless **Follow the person** is
+  switched on for the fill layout (`editing/follow.py`).
 - **One FFmpeg run per clip.** The input is opened two seconds early and the exact cut is made inside the
   filter graph with `trim` and `atrim` on one timeline, so picture and sound are cut on the same frame. Audio
   is levelled to −14 LUFS with `loudnorm`. Encoding uses NVENC if it passed its test, otherwise x264; if an
@@ -203,9 +208,15 @@ Every path stored in the database is relative to `data/`, so the folder can be m
 Videos linked from disk keep their original absolute path and are never copied or deleted.
 
 Tables: `projects`, `videos`, `transcript_segments` (with a full-text index, `transcript_fts`), `jobs`,
-`clips`, `feedback`, `settings`, `secrets`, `presets`, `notifications`. The schema is created and changed
-only through Alembic migrations in `backend/alembic/versions`, applied automatically at start under a file
-lock so the two processes cannot migrate at once.
+`clips`, `feedback`, `settings`, `secrets`, `presets`, `notifications`, `accounts` and `posts` (publishing),
+`creators` and `creator_videos` (Creator Discovery). The schema is created and changed only through Alembic
+migrations in `backend/alembic/versions`, applied automatically at start under a file lock so the two
+processes cannot migrate at once. A test compares what the migrations build with what `models.py` describes.
+
+Tables whose rows other rows, files or links point at (`projects`, `videos`, `jobs`, `clips`, `accounts`,
+`posts`, `creators`, `creator_videos`) never give the id of a deleted row to a new one (`AUTOINCREMENT`). SQLite loses that rule when Alembic rebuilds a table,
+which it does to drop a column, so every such rebuild passes `sqlite_autoincrement`; migration 0006 puts the
+rule back on a `clips` table that had lost it that way.
 
 ## The job queue
 
@@ -228,6 +239,8 @@ All under `/api`. Interactive documentation is at `http://localhost:3000/api/doc
 |---|---|
 | Videos | upload (raw stream), check a link, import from a link, link from disk, list, read, update, delete, stream with seeking, thumbnail, analyze, transcript read and correct, timeline, make a clip by hand |
 | Clips | list with filters and sorting, batch actions, manual order, export to folder, read, update, delete, render, duplicate as a variant, file, still frame, thumbnail (see, download, make again with other words, another word in colour or another moment), TikTok caption rewritten by Claude (with or without emojis and hashtags; your own saved with the clip), YouTube title and description written by Claude (not saved), prompt edit (your words → checked changes → rendered again) and its undo, caption words, SRT and VTT, post text, feedback |
+| Publishing | your developer-app credentials (write-only), connect and disconnect an account, the sign-in's return, the queue (add with all-or-nothing checks, list by date, cancel, retry, remove), Claude's post text |
+| Creator Discovery | overview (key set or not, quota used, followed channels, suggestions from your library), try the key, find a channel, follow, record your right to clip, unfollow, look at one channel now, look at all (a job), the found videos with filters and ordering, hide and bring back, read one video's comments, import a found video |
 | Jobs | list, read, cancel, retry |
 | System | health, shut down (in order, as `stop.ps1` does), hardware and re-test, live load, feature status, storage and cleanup, settings, credential store (write-only), options for the interface, your own presets (list, save under a name, remove; checked by the same rules as an analysis), speech-model install, dashboard, notifications, search, projects |
 
@@ -237,10 +250,11 @@ written for a person and, where useful, a `hint` saying what to do.
 ## Interface
 
 `frontend/src`: React with TypeScript, built by Vite, styled with Tailwind. Server state goes through TanStack
-Query, which polls while jobs are active. Pages: Dashboard, AI Clipper, Clip Library, Video Editor, Settings,
-and plain "not built yet" pages for Creator Discovery, Publishing Studio, Analytics, Automation Center and AI
-Strategist. Those pages have no controls: they say what is missing, what it will need from you, and what
-works today.
+Query, which polls while jobs are active. Pages: Dashboard, AI Clipper, Creator Discovery, Clip Library, Video
+Editor, Publishing Studio, Settings, and plain "not built yet" pages for Analytics, Automation Center and AI
+Strategist. Those three have no controls: they say what is missing, what it will need from you, and what
+works today. The interface reaches the backend only through `lib/api.ts`. A field for a secret
+(`components/secret.tsx`) can save or remove one and shows only whether one is stored.
 
 ## Decisions and trade-offs
 
@@ -252,6 +266,8 @@ works today.
 | Fixed crop per clip, unless you switch on **Follow the person** | Predictable, no wobble | A subject who moves across the frame can leave a fixed crop |
 | The following camera is a few points in time, moved by FFmpeg in the same render (`editing/follow.py`; the "heavy tripod" idea is from OpenShorts, MIT) | One render, no second pass; a stray detection never moves the frame, because a move must be seen three times in a row | Sideways only; the person is watched four times a second, so it reacts in about a second, on purpose; the live preview does not show it |
 | Link imports ask for your right to clip first, and never sign in | A public video is not automatically yours to repost; cookies and logins would hand a downloader your accounts | Private, members-only and age-restricted videos cannot be imported from a link; you add those as files |
+| Creator Discovery reads counts from YouTube's official API with your own key, and never scrapes | Allowed by the platform, stable, and every number can be traced to public data | Only what the API offers: the top 100 comments as YouTube ranks them, no chat replay, no retention or other private numbers; each user makes a free key once |
+| What viewers wrote is a hint for the picker, never a rule | Comments are written by strangers; a clip must stand on its own transcript | A moment viewers loved can still be left out when the words around it do not make a clip |
 | Built interface served by the API | One address, one command, no CORS setup | Interface changes need a rebuild (or `start.ps1 -Dev`) |
 
 ## Clips from your own timestamps
@@ -339,14 +355,53 @@ posts whose time has come every 10 seconds (`enqueue_due`). A post goes schedule
 published, or ends as scheduled_on_platform (YouTube publishes it itself), private, in_drafts (TikTok inbox),
 failed or cancelled.
 
+## Creator Discovery
+
+The `discovery/` package, `api/discovery.py` and the `discover` job. Built from the YouTube Data API's
+documentation and tested against a local stand-in of it (`tests/fake_youtube_data.py`); it has not yet made a
+request with a real key.
+
+- `youtube_api.py`: a small client for the YouTube Data API v3: `channels`, `playlistItems`, `videos`,
+  `commentThreads`, and `search` only when you ask for a search by name, because it costs a hundred times as
+  much. The key travels in the `X-goog-api-key` header, never in an address. Every request adds its cost in
+  YouTube's quota units to a count. Every refusal becomes a `DiscoveryError` that says what to do and is
+  marked as a key problem, a used-up quota, or something worth trying again. The particular reason in
+  YouTube's answer is read before the general status, because "comments are switched off" for one video
+  arrives with the same 403 as a refused key.
+- `signals.py`: plain functions, no network and no database. What you typed is told apart: a channel id, an
+  @handle, a link to a channel or to one of its videos, or a name. A comment counts as laughing by a fixed
+  list (laughing emoji, lol, lmao, haha, "I'm dead" and the like). Times written in a comment are read; a
+  comment with five or more is taken for a chapter list and left out, and so are times in the first three
+  seconds or past the end. Times within 20 seconds of each other are one moment, shown with the words of its
+  most-liked comment, cut to one short line. A video's views are compared with the middle value of the
+  channel's other long videos, only when there are at least four to compare with.
+- `service.py`: following, looking, the list and the import. A look reads the channel, its 25 newest uploads
+  and their public numbers, then the top 100 comments of at most 12 long, finished videos: new ones first, and
+  ones younger than 14 days again after 20 hours. No database write is held open while waiting for YouTube.
+  Rows YouTube has not confirmed for 30 days are deleted. The units spent are added up per YouTube day (it
+  starts at midnight Pacific time) in the settings table and shown on the page.
+- **When it looks.** One channel at once when you press **Look now**, or every channel in one `discover` job.
+  The worker queues that job, once a minute, for channels that are due (`discovery.check_hours`: 6 by default,
+  0 for never). A refused key or a used-up quota pauses those automatic looks for six hours.
+- **Import** is the link importer, unchanged. `import_video` only adds the video's address, the creator's
+  name and the stated right to clip: from your record for that creator, or said for this video. A found video
+  and a video in your library are matched by YouTube id, which is how the list knows a video's clips and how
+  they scored.
+- **Hints for the picker.** When an analysed video was found through discovery, the moments its viewers wrote
+  down go into Claude's request as a block marked as hints from the audience, never instructions
+  (`claude_review.viewer_hints`). Any clip that holds one gets an evidence line of its own, also when the
+  local rules picked it. A hint changes no score by itself.
+
+Two tables: `creators` (a followed channel: its public details, your right to clip its videos and where that
+comes from, when it was last looked at, and why that failed if it did) and `creator_videos` (a found video:
+public details and numbers, `signals` with the comment counts and moments, and whether you hid it).
+
 ## Where the planned parts will plug in
 
-- **Language-model review** (`analysis/`): a pass after scoring that re-ranks the top candidates and writes
-  titles, behind a provider interface (Ollama locally, or a paid API with a cost estimate and explicit
-  opt-in). The settings and encrypted key store for it exist.
-- **Discovery** (new `sources/` package): YouTube Data API with your own key; a discovered video is a
-  suggestion with a rights status, which you can then import with the link importer.
 - **Analytics**: metrics tables fed only by connected accounts or values you type in, each labelled with its
   origin.
-- **Speaker and subject tracking** (`editing/reframe.py`): the crop already comes from a plan object, so a
-  time-varying plan can replace the fixed one.
+- **Who-is-speaking detection and following in the stacked layouts** (`editing/reframe.py`,
+  `editing/follow.py`): the crop already comes from a plan object and the fill layout already takes a path
+  through time, so the stacked layouts can be given one too.
+- **Other sources for discovery** (`discovery/`): `creators.platform` is there so that Twitch, with its
+  official API for viewers' clips, can sit beside YouTube.

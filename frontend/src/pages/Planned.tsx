@@ -1,26 +1,15 @@
 // Pages for the parts of the product that are not built yet. They say so plainly, list what each part
 // needs, and point at what already works today. No mock data, no buttons that pretend.
-import { BarChart3, BrainCircuit, CheckCircle2, CircleDashed, CircleSlash, Compass, Lock, Workflow, Wrench } from "lucide-react";
+import { BarChart3, BrainCircuit, CheckCircle2, CircleDashed, CircleSlash, Lock, Workflow, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Badge, Button, Card, CardHeader, Spinner, type Tone } from "../components/ui";
 import type { Feature } from "../lib/api";
 import { useFeatures } from "../lib/hooks";
 
-type Area = "discovery" | "analytics" | "automation" | "strategist";
+type Area = "analytics" | "automation" | "strategist";
 
 const PAGES: Record<Area, { title: string; icon: ReactNode; summary: string; features: string[]; needs: string[]; today: { text: string; to: string; label: string } }> = {
-  discovery: {
-    title: "Creator Discovery", icon: <Compass className="h-6 w-6" />,
-    summary: "Find and follow YouTube channels, see their new uploads, and queue the ones you are allowed to clip.",
-    features: ["discovery", "youtube_url"],
-    needs: [
-      "A YouTube Data API key from your own Google Cloud project (free quota is enough for personal use).",
-      "A rights record per creator: clipping welcome, licensed through a campaign, or not allowed.",
-      "Only public figures the official API provides. No impressions, retention or other private numbers.",
-    ],
-    today: { text: "You can already import a video by pasting its link, and record the creator and your right to clip on every video you add.", to: "/clipper", label: "Open the AI Clipper" },
-  },
   analytics: {
     title: "Analytics", icon: <BarChart3 className="h-6 w-6" />,
     summary: "Track how posted clips perform and compare the scores ClipForge gave them with what actually happened.",
@@ -34,12 +23,12 @@ const PAGES: Record<Area, { title: string; icon: ReactNode; summary: string; fea
   automation: {
     title: "Automation Center", icon: <Workflow className="h-6 w-6" />,
     summary: "Rules such as: when a followed creator uploads, analyse it, render the top five, and tell me.",
-    features: ["automation", "resume", "notifications"],
+    features: ["automation", "discovery", "resume", "notifications"],
     needs: [
-      "Creator Discovery, for the upload trigger.",
+      "Rules that act on what Creator Discovery finds. Today it shows new uploads and you choose which to import.",
       "Publishing, for any step that posts. Automatic posting will be opt-in, reviewable and stoppable.",
     ],
-    today: { text: "The queue already processes several videos one after another and survives restarts.", to: "/clipper", label: "Open the AI Clipper" },
+    today: { text: "Creator Discovery already looks at the channels you follow by itself, and the queue processes several videos one after another and survives restarts.", to: "/discovery", label: "Open Creator Discovery" },
   },
   strategist: {
     title: "AI Strategist", icon: <BrainCircuit className="h-6 w-6" />,

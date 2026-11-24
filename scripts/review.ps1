@@ -81,7 +81,13 @@ try {
         exit $code
     }
     $header = "# Code review by ChatGPT ($Model) through Codex`n`nReviewed: $what, on $(Get-Date -Format 'yyyy-MM-dd HH:mm').`n`n"
-    [IO.File]::WriteAllText($file, $header + (($output | Out-String).Trim()) + "`n")
+    # The review names files by their full path on this PC. Saved, they are named from the project folder, so
+    # a review that ends up in Git does not carry your user name and folder layout with it.
+    $text = ($output | Out-String).Trim()
+    foreach ($root in @($ProjectRoot, $ProjectRoot.Replace("\", "/"))) {
+        foreach ($slash in @("\", "/")) { $text = $text.Replace($root + $slash, "") }
+    }
+    [IO.File]::WriteAllText($file, $header + $text + "`n")
     $output | Select-Object -Last 60 | Out-Host
     Write-Ok "Review saved to $file"
 } finally {

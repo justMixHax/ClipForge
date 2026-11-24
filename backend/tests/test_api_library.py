@@ -11,7 +11,8 @@ from fastapi.testclient import TestClient
 from app import db
 from app.db import utcnow
 from app.jobs import pipeline, queue
-from app.models import Job, TranscriptSegment
+from app.models import Clip, Job, TranscriptSegment, Video
+from app.services import storage
 from tests.test_api import client, clip, upload, uploaded  # noqa: F401  (fixtures shared with the main API tests)
 
 pytestmark = pytest.mark.ffmpeg
@@ -331,3 +332,21 @@ def test_an_upload_can_go_straight_into_a_project(client: TestClient, tiny_video
 
     assert video["project_id"] == project["id"]
     assert [v["id"] for v in client.get("/api/videos", params={"project_id": project["id"]}).json()] == [video["id"]]
+
+
+def test_clips_can_be_listed_by_what_kind_of_moment_they_are(client: TestClient):
+    with db.session_scope() as s:
+        video = Video(title="Stream", original_filename="s.mp4", storage_key=storage.new_key(), storage_mode="linked",
+                      file_path="C:/nowhere/s.mp4", duration=600, width=1920, height=1080)
+        s.add(video)
+        s.flush()
+        for title, category, score in (("Chair", "funny", 84), ("Clutch", "hype", 90), ("Scam call", "funny", 72)):
+            s.add(Clip(video_id=video.id, storage_key=storage.new_key(), title=title, start=0, end=30,
+                       category=category, score=score))
+
+    funny = client.get("/api/clips", params={"category": "funny"}).json()
+    everything = client.get("/api/clips").json()
+
+    assert [c["title"] for c in funny["items"]] == ["Chair", "Scam call"] and funny["total"] == 2
+    assert everything["total"] == 3
+    assert client.get("/api/clips", params={"category": "nonsense"}).json()["total"] == 0

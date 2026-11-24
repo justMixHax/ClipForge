@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..errors import ClipForgeError
 from ..models import Account
+from ..security.secrets import SecretError
 from ..services import settings_store
 from .base import Profile, PublishError, Tokens
 from .instagram import Instagram
@@ -58,8 +59,13 @@ def app_credentials(session: Session, platform: str) -> dict[str, str] | None:
 
 
 def app_summary(session: Session, platform: str) -> dict[str, Any]:
-    """Safe to show: whether the app is set up, and its public ID. Never the secret."""
-    creds = app_credentials(session, platform)
+    """Safe to show: whether the app is set up, and its public ID. Never the secret. Credentials this PC cannot
+    read (the data folder came from another PC or Windows account) count as not set up: they have to be entered
+    again, and the page has to open for that."""
+    try:
+        creds = app_credentials(session, platform)
+    except SecretError:
+        creds = None
     return {"configured": creds is not None, "client_id": creds["client_id"] if creds else ""}
 
 

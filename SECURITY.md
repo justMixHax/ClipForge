@@ -1,8 +1,9 @@
 # Security and privacy
 
 ClipForge is a single-user application for one PC. It has no login, because it only accepts connections from
-the PC it runs on. This document says what that design protects against, how, where the limits are, and
-which rules the planned integrations will have to follow.
+the PC it runs on. This document says what that design protects against, how, where the limits are, what
+goes over the network and when, and which rules the integrations follow. To report a security problem, see
+the [last section](#reporting-a-security-problem).
 
 ## What it protects against
 
@@ -24,6 +25,9 @@ which rules the planned integrations will have to follow.
 | Credentials leaking from the database | Stored credentials are encrypted (Fernet: AES with an integrity check). The key is in `data/secret.key`, itself encrypted with Windows DPAPI for your Windows account | `security/secrets.py` | `test_secrets.py` |
 | Credentials leaking through the interface | The API can store and delete a credential but never returns one; it only reports whether one is set | `services/settings_store.py` | `test_settings_are_validated_and_secrets_never_come_back` |
 | Credentials leaking into logs | Anything shaped like a key, token, password or authorization header is masked before a log line is written, including inside error traces and web addresses | `logging_config.redact` | `test_logging.py` |
+| The YouTube API key ending up in a web address, a log or the interface | The key is stored encrypted like every credential, travels to YouTube in a request header and never in a web address, and is never returned by the API | `discovery/youtube_api.py`, `discovery/service.py` | `test_the_key_travels_in_a_header_and_never_in_the_address`, `test_the_key_is_kept_encrypted_and_never_comes_back` |
+| Finding a video turning into downloading it | Creator Discovery only reads public details. An import is a separate step that needs a stated right to clip, from your record for that creator or said for that video. Nothing is imported there from a creator you marked "not allowed", whatever is said for one video: the record has to be changed first | `discovery/service.import_video` | `test_a_found_video_is_not_imported_until_you_say_why_you_may_clip_it`, `test_a_creator_you_marked_as_not_allowed_is_never_imported_from`, `test_a_right_said_for_one_video_does_not_get_around_not_allowed` |
+| Words written by strangers (YouTube comments) steering Claude | Only comments that name a time are used, cut to one short line without control characters or text-direction tricks. Claude gets them inside a block that says they are hints from viewers and never instructions, runs with no tools, and its picks pass the same checks as without them | `discovery/signals.clean_excerpt`, `analysis/claude_review.viewer_hints` | `test_moments_viewers_wrote_in_the_comments_are_given_to_claude_as_hints`, `test_discovery_signals.py` |
 | Cleanup deleting the wrong thing | Cleanup acts only inside the data folder and never on source videos or approved clips | `api/system.cleanup` | `test_cleanup_*` |
 | The page being framed or sniffed | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; API responses are not cached | `main.py` | |
 
@@ -43,7 +47,9 @@ which rules the planned integrations will have to follow.
   separate programs, so a crash fails the job rather than the app, but a malicious file that exploits an
   FFmpeg bug would have your user's permissions. Keep FFmpeg updated and be careful with files from strangers.
 - **Stored credentials are tied to this Windows account on this PC.** After reinstalling Windows or moving to
-  another PC they cannot be decrypted and have to be entered again. That is intended.
+  another PC they cannot be decrypted and have to be entered again. That is intended. ClipForge then says so
+  instead of failing, and the first key you save puts the unreadable key file aside
+  (`data\secret.key.unreadable-…`, kept in case it was this PC's after all) and starts a new one.
 
 ## What goes over the network
 
@@ -56,19 +62,32 @@ Nothing, unless you start it:
 | `scripts\get-fonts.ps1` | Four open-licence font families | GitHub |
 | `scripts\enable-gpu.ps1` | NVIDIA runtime libraries | PyPI |
 | Checking or importing a link | The video's details, then the video itself | The site in the link you pasted, and the addresses that site serves its video from |
-| Analysing a video with Claude as the engine (the default) | The video's transcript, title and creator name, never the video itself | Anthropic, through the Claude Code tool on this PC and your own Claude sign-in |
+| Analysing a video with Claude as the engine (the default) | The video's transcript, title and creator name, never the video itself. For a video found through Creator Discovery, also the short lines from its public comments that name a moment | Anthropic, through the Claude Code tool on this PC and your own Claude sign-in |
+| A prompt edit | What you wrote, the clip's settings and words, the names of the fonts on this PC, and two still pictures taken from the clip | Anthropic, the same way |
+| Post text, a TikTok caption or a YouTube title and description, when you press the button for one | What is said in the clip, its title and the creator's name | Anthropic, the same way |
 | ChatGPT's second opinion (on by default, skipped with "Local rules only") | The transcript, title, creator name and the picks | OpenAI, through the Codex tool from the ChatGPT app, only when it is signed in with ChatGPT (never an API key) |
-| `scripts\review.ps1` (code reviews) | The uncommitted code changes | OpenAI, the same way |
+| Creator Discovery: trying the key, finding, following or checking a channel | Your API key (in a header) and the ids of the channels and videos asked about. Nothing from your library | Google's YouTube Data API (`www.googleapis.com`) |
+| Opening the Creator Discovery page | Your browser fetches the channel pictures and video thumbnails, as it would on youtube.com. No referrer is sent | YouTube's image servers (`i.ytimg.com`, `yt3.ggpht.com`) |
+| Connecting an account in the Publishing Studio | The platform's own sign-in, in your browser; a one-time code comes back to this PC | Google, TikTok or Meta |
+| A post whose time has come | The clip's video file, title, text and hashtags | The platform and account you chose for it |
+| `scripts\review.ps1` (code reviews, for people changing ClipForge) | The uncommitted code changes | OpenAI, the same way as the second opinion |
 | `scripts\update-downloader.ps1` | The newest yt-dlp release | PyPI |
 
-There is no telemetry, no update check and no analytics. Your videos and clips are never uploaded.
-Transcripts are sent only to Claude when it picks the clips and to ChatGPT when it checks them; set Settings → Who picks the clips to
-"Local rules only" to keep everything on this PC. No paid API is ever called: the language-model review that would use one is not built, and the
-setting that will allow paid requests is off by default.
+There is no telemetry, no update check and no analytics. Your source videos are never uploaded anywhere. A
+clip leaves this PC only when you publish it to an account you connected, and pictures from a clip go to
+Claude only with a prompt edit. Transcripts are sent only to Claude when it picks the clips and to ChatGPT when
+it checks them; set Settings → Who picks the clips to "Local rules only" and nothing is sent to either.
+
+No paid API is ever called. Claude and ChatGPT are reached through the tools of your own plans, never with an
+API key, and what they cost is whatever your plan already costs. The YouTube Data API is used inside the free
+daily quota of your own Google Cloud project; ClipForge counts what it spends and shows it on the Creator
+Discovery page.
 
 ## Third-party code
 
-The three reference projects were read, not installed or run; see [docs/RESEARCH.md](docs/RESEARCH.md).
+The reference projects were read for ideas; none of their code is in ClipForge or run by it. See
+[docs/RESEARCH.md](docs/RESEARCH.md) for what was learned from each, and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for everything setup installs and its licence.
 yt-dlp, which does the link imports, was checked before it was installed: the official PyPI release
 2026.10.26, pure Python with no install scripts, published by its known maintainers, Unlicense. Every
 Python dependency is pinned to an exact version in `backend/requirements.txt`, and the interface's
@@ -101,6 +120,30 @@ Built on 22 November 2026, to these rules:
 - **TikTok direct posting is not offered**: TikTok's rules for it exclude tools for posting to your own
   accounts. ClipForge sends drafts to your inbox instead.
 
+## Creator Discovery
+
+Built on 24 November 2026, to these rules. It has been tested against a local stand-in of the YouTube Data
+API; it has not yet made a request with a real key.
+
+- **The official API only**: YouTube Data API v3, with a free key from your own Google Cloud project. No
+  scraping, no sign-in, no cookies. Using it means agreeing to the
+  [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service).
+- **Public details only.** A channel's name, picture, description and public numbers; its newest uploads with
+  their title, description, length, date, views, likes and comment count; and the top comments of long,
+  finished videos. A hidden subscriber count stays unknown rather than guessed.
+- **What is kept, and for how long.** Those details, and for each moment viewers pointed at one short line of
+  the most-liked comment naming it, never who wrote it. Anything YouTube has not confirmed again for 30 days is
+  deleted, as YouTube's rules for API data ask. Unfollowing a channel deletes what was found for it at once;
+  videos you imported stay in your library.
+- **Discovery is not a licence.** A found video is a suggestion. Importing it is a separate step that asks for
+  your right to clip it first; the answer can be recorded once per creator, with a note saying where the
+  permission comes from.
+- **Numbers are counts, not predictions.** "8 of the top 100 comments are laughing" is a count of public
+  comments. Nothing on the page claims a video will do well.
+- **The quota is yours and it is counted.** Every request's cost in YouTube's units is added up per YouTube day
+  and shown. A refused key or a used-up quota stops the automatic checks for six hours instead of asking again
+  and again.
+
 ## Rules for the integrations that are not built yet
 
 These are requirements, written down now so they are not negotiable later:
@@ -111,8 +154,6 @@ These are requirements, written down now so they are not negotiable later:
   exposed.
 - **Paid requests are opt-in.** Any feature that costs money shows an estimate first and stays off until you
   switch it on.
-- **Discovery is not a licence.** A video found through an API is a suggestion with a rights status of "not
-  recorded". Importing it is a separate step that asks for your right to clip it first.
 
 ## Clipping other people's content
 
@@ -122,8 +163,13 @@ permission comes from. Both are written into the post text of every clip, togeth
 credit does not replace permission. The app does not stop you rendering a clip from a source marked "not
 recorded"; it makes sure you can see that it is.
 
-## If you find a problem
+## Reporting a security problem
 
-This is your own private installation, so there is nobody to report to but yourself. Useful places to look:
-`data/logs/api.log`, `data/logs/worker.log`, and the tests named in the table above, which show the intended
-behaviour.
+Please do not open a public issue for something that could put other users at risk. Use **Report a
+vulnerability** under the repository's **Security** tab on GitHub, which reaches the maintainer privately. Say
+what you did, what happened, and what you expected; a failing test is the most useful report there is.
+
+ClipForge is maintained by one person in their spare time, so there is no promised response time and no
+bounty. Anything else (a crash, a wrong result) is an ordinary issue; [CONTRIBUTING.md](CONTRIBUTING.md) says
+what to include. Useful places to look first: `data/logs/api.log`, `data/logs/worker.log`, and the tests named
+in the table above, which show the intended behaviour.

@@ -14,7 +14,7 @@ const WHO: Record<string, { label: string; className: string }> = {
   forge: { label: "Forge did this:", className: "text-info" },
 };
 
-const JOB_NAME: Record<string, string> = { analyze: "Finding clips", render: "Rendering", import: "Importing from a link", moment: "Your own moment" };
+const JOB_NAME: Record<string, string> = { analyze: "Finding clips", render: "Rendering", import: "Importing from a link", moment: "Your own moment", publish: "Posting", discover: "Checking followed channels" };
 
 export function logOf(job: Job): LogLine[] {
   const log = (job.result as { log?: LogLine[] } | null)?.log;

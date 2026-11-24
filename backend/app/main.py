@@ -18,10 +18,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__, db
-from .api import clips, jobs, publishing, system, videos
+from .api import clips, discovery, jobs, publishing, system, videos
 from .config import check_bind, get_settings
 from .errors import ClipForgeError
 from .logging_config import quiet_dropped_connections, setup_logging
+from .security.secrets import SecretError
 from .services.supervisor import WorkerSupervisor
 
 log = logging.getLogger("clipforge.api")
@@ -91,6 +92,15 @@ def create_app() -> FastAPI:
             body["hint"] = exc.hint
         return JSONResponse(body, status_code=exc.status_code)
 
+    @app.exception_handler(SecretError)
+    async def unreadable_credential(request: Request, exc: SecretError) -> JSONResponse:
+        """A stored key or sign-in that this PC cannot decrypt: the data folder was copied from another PC or
+        Windows account, or Windows was installed again. Not a fault of the server, and it says what to do."""
+        log.warning("a stored credential could not be read on %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse({"error": "A stored key or sign-in cannot be read on this PC.",
+                             "hint": "That happens when the data folder comes from another PC or Windows account. "
+                                     "Enter the key again, or connect the account again."}, status_code=400)
+
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
         first = exc.errors()[0] if exc.errors() else {}
@@ -109,7 +119,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"error": "Something went wrong on the server.",
                              "hint": f"Details are in data/logs/api.log (reference {reference})."}, status_code=500)
 
-    for module in (videos, clips, jobs, system, publishing):
+    for module in (videos, clips, jobs, system, publishing, discovery):
         app.include_router(module.router, prefix="/api")
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
