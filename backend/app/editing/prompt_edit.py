@@ -11,17 +11,24 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import io
 import json
 import math
 import re
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from ..analysis import claude_review
 from ..analysis.answers import json_answers
 from ..analysis.describe import clean_words
 from ..errors import ClipForgeError, DependencyMissing
+from ..services import ffmpeg
 from .captions import PRESET_LABELS, PRESETS, CaptionWord, resolve_style
 from .reframe import ASPECTS, LAYOUT_LABELS, LAYOUTS
 from .thumbnail import can_draw
@@ -176,7 +183,9 @@ def _font(value: Any, fonts: Sequence[str]) -> str | None:
 
 # ------------------------------------------------------------------------------------------- the changes
 def make_changes(state: dict[str, Any], changes: Any, *, duration: float, words: Sequence[Any],
-                 fonts: Sequence[str], defaults: dict[str, Any] | None = None) -> Outcome:
+                 fonts: Sequence[str], defaults: dict[str, Any] | None = None,
+                 frame: tuple[int, int] | None = None,
+                 snap: Callable[[list[int]], list[int]] | None = None) -> Outcome:
     """Check Claude's changes against what ClipForge allows and make them on a copy of the clip's state. Values
     out of range are brought within it; what cannot be made is listed in not_done, with the reason."""
     defaults = {**DEFAULTS, **(defaults or {})}
@@ -194,7 +203,7 @@ def make_changes(state: dict[str, Any], changes: Any, *, duration: float, words:
     _subtitles(out, changes, fonts, defaults)
     _word_fixes(out, changes)
     _hook(out, changes)
-    _frame(out, changes)
+    _frame(out, changes, frame, snap)
     _sound(out, changes, defaults)
     _title(out, changes)
     _thumbnail(out, changes)
@@ -463,7 +472,30 @@ def _hook(out: Outcome, changes: dict[str, Any]) -> None:
         st["hook"] = hook
 
 
-def _frame(out: Outcome, changes: dict[str, Any]) -> None:
+def _part(value: Any, frame: tuple[int, int]) -> tuple[list[int] | None, str]:
+    """A rectangle of the picture in percent ([x, y, width, height], or with those names), in source pixels and
+    kept inside the picture; None and the reason when it is not one."""
+    if isinstance(value, dict):
+        value = [value.get(key, value.get(long)) for key, long in (("x", "x"), ("y", "y"), ("w", "width"),
+                                                                     ("h", "height"))]
+    numbers = [_number(v) for v in value] if isinstance(value, (list, tuple)) and len(value) == 4 else []
+    if len(numbers) != 4 or any(n is None for n in numbers):
+        return None, "is not a rectangle of the picture (x, y, width and height in percent)"
+    x, y = (min(max(n, 0.0), 100.0) for n in numbers[:2])
+    w, h = min(numbers[2], 100.0 - x), min(numbers[3], 100.0 - y)
+    if w < 5 or h < 5:
+        return None, "is too small (at least 5% of the picture each way)"
+    width, height = frame
+    return [round(x * width / 100), round(y * height / 100), round(w * width / 100), round(h * height / 100)], ""
+
+
+def _where(box: list[int], frame: tuple[int, int]) -> str:
+    x, y, w, h = (100 * v / size for v, size in zip(box, (frame[0], frame[1], frame[0], frame[1])))
+    return f"{w:.0f}% × {h:.0f}% of the picture, from {x:.0f}% across and {y:.0f}% down"
+
+
+def _frame(out: Outcome, changes: dict[str, Any], frame: tuple[int, int] | None = None,
+           snap: Callable[[list[int]], list[int]] | None = None) -> None:
     raw = changes.get("layout")
     if raw is None:
         return
@@ -471,9 +503,50 @@ def _frame(out: Outcome, changes: dict[str, Any]) -> None:
         out.not_done.append("The layout changes could not be read.")
         return
     for key in raw:
-        if key not in ("shape", "layout", "zoom", "subject_x"):
+        if key not in ("shape", "layout", "zoom", "subject_x", "top", "bottom"):
             out.not_done.append(f"The layout's “{_shown(key)}” cannot be changed in ClipForge yet.")
     st = out.state["settings"]
+    # Parts of the picture for the stacked layouts (top: facecam_box, bottom: gameplay_box). If one is wrong, the
+    # layout is left as it is: a split screen half made would hunt for faces again.
+    parts: dict[str, list[int]] = {}
+    parts_failed = False
+    if "top" in raw or "bottom" in raw:
+        if frame is None:
+            out.not_done.append("Choosing parts of the picture needs a picture of the video, and none could be "
+                                "taken this time, so the layout stays as it was.")
+            parts_failed = True
+        else:
+            for key, label in (("top", "top part"), ("bottom", "bottom part")):
+                if key in raw:
+                    box, why = _part(raw[key], frame)
+                    if box is None:
+                        out.not_done.append(f"The {label} {why}, so the layout stays as it was.")
+                        parts_failed = True
+                    else:
+                        parts[key] = snap(box) if snap is not None else box
+        wanted = _layout(raw["layout"]) if "layout" in raw else None
+        target = wanted or (st.get("layout") if st.get("layout") in ("split", "facecam_top") else "split")
+        if not parts_failed and target not in ("split", "facecam_top"):
+            # parts mean nothing to the other layouts, and left behind they would steer "Automatic" later
+            out.not_done.append("Parts of the picture are only used by the stacked layouts (split screen, facecam "
+                                "over gameplay), so they were not kept.")
+            parts = {}
+        has_top = "top" in parts or st.get("facecam_box")
+        has_bottom = "bottom" in parts or st.get("gameplay_box")
+        if not parts_failed and target == "split" and not (has_top and has_bottom):
+            out.not_done.append("A split screen needs both parts, the top and the bottom, so the layout stays as it "
+                                "was.")
+            parts_failed = True
+        if not parts_failed:
+            if target != st.get("layout", "auto"):
+                st["layout"] = target
+                out.done.append(f"Layout: {LAYOUT_LABELS[target]}")
+            for key, setting, label in (("top", "facecam_box", "Top part"), ("bottom", "gameplay_box", "Bottom part")):
+                if key in parts and parts[key] != st.get(setting):
+                    st[setting] = parts[key]
+                    out.done.append(f"{label}: {_where(parts[key], frame)}")
+    if parts_failed:
+        raw = {key: value for key, value in raw.items() if key != "layout"}
     if "shape" in raw:
         shape = str(raw["shape"]).strip()
         if shape not in ASPECTS:
@@ -481,7 +554,7 @@ def _frame(out: Outcome, changes: dict[str, Any]) -> None:
         elif shape != st.get("aspect", "9:16"):
             st["aspect"] = shape
             out.done.append(f"Shape: {shape}")
-    if "layout" in raw:
+    if "layout" in raw and not parts:
         layout = _layout(raw["layout"])
         if layout is None:
             out.not_done.append(f"There is no layout called “{_shown(raw['layout'])}”.")
@@ -581,6 +654,136 @@ def _thumbnail(out: Outcome, changes: dict[str, Any]) -> None:
             out.done.append(f"Thumbnail picture from {clock(moment)}")
 
 
+# ------------------------------------------------------------------------------- what Claude looks at
+SHEET_FRAMES = 8
+
+
+def typical_frame(frames: Sequence[np.ndarray]) -> int:
+    """The frame most like the others: in a recorded call the layout can change for a while (one camera shown
+    large), and the frame Claude measures on should show how the clip usually looks."""
+    small = [np.asarray(frame, dtype=np.float32) for frame in frames]
+    totals = [sum(float(np.mean(np.abs(a - b))) for b in small) for a in small]
+    return int(np.argmin(totals))
+
+
+def frame_sheet(frames: Sequence[Image.Image], labels: Sequence[str], columns: int = 4) -> bytes:
+    """Small frames side by side, each with its time in the clip, as one JPEG."""
+    width, height = frames[0].size
+    rows = math.ceil(len(frames) / columns)
+    sheet = Image.new("RGB", (columns * width, rows * height), (0, 0, 0))
+    try:
+        font = ImageFont.load_default(size=max(14, height // 9))
+    except TypeError:  # an older Pillow: its one small font
+        font = ImageFont.load_default()
+    for index, (frame, label) in enumerate(zip(frames, labels)):
+        x, y = (index % columns) * width, (index // columns) * height
+        sheet.paste(frame.convert("RGB").resize((width, height)), (x, y))
+        draw = ImageDraw.Draw(sheet)
+        box = draw.textbbox((x + 6, y + 4), label, font=font)
+        draw.rectangle((box[0] - 4, box[1] - 2, box[2] + 4, box[3] + 2), fill=(0, 0, 0))
+        draw.text((x + 6, y + 4), label, fill=(255, 230, 0), font=font)
+    out = io.BytesIO()
+    sheet.save(out, format="JPEG", quality=80)
+    return out.getvalue()
+
+
+@dataclass
+class Pictures:
+    jpegs: list[bytes] = field(default_factory=list)       # the typical frame, large; the frames across the clip
+    at: float | None = None                                 # the source time of the typical frame
+    labels: list[str] = field(default_factory=list)         # the times in the clip of the frames across it
+    grey: list[np.ndarray] = field(default_factory=list)    # those frames in grey, to find edges in
+
+
+def pictures_of(source: Path, start: float, end: float) -> Pictures:
+    """What Claude looks at: the frame most like the rest of the clip, large (it measures on it), and frames
+    across the clip with their times (to see whether the picture changes). Nothing when they cannot be taken."""
+    length = max(0.0, end - start)
+    times = [start + length * (i + 0.5) / SHEET_FRAMES for i in range(SHEET_FRAMES)]
+    try:
+        with tempfile.TemporaryDirectory(prefix="clipforge_frames_") as folder:
+            frames = []
+            for i, at in enumerate(times):
+                path = ffmpeg.grab_frame(source, at, Path(folder) / f"small_{i}.jpg", width=640)
+                with Image.open(path) as image:
+                    frames.append(image.convert("RGB"))
+            grey = [np.asarray(frame.convert("L")) for frame in frames]
+            typical = typical_frame([np.asarray(frame.convert("L").resize((64, 36))) for frame in frames])
+            large = ffmpeg.grab_frame(source, times[typical], Path(folder) / "frame.jpg", width=1280).read_bytes()
+    except (ffmpeg.FFmpegError, OSError):
+        return Pictures()
+    labels = [clock(at - start) for at in times]
+    small = [frame.resize((320, max(2, round(frame.height * 320 / frame.width)))) for frame in frames]
+    return Pictures([large, frame_sheet(small, labels)], round(times[typical], 3), labels, grey)
+
+
+def snap_part(frames: Sequence[np.ndarray], box: Sequence[float], source: tuple[int, int],
+              reach: float = 0.06) -> list[int]:
+    """A part drawn round a camera (in source pixels), moved onto the camera's own edges: in each frame, the
+    strongest straight line near each side, along most of that side. The camera can move a little during the
+    clip (seen for real: Discord's tiles moved 18 px when a bar at its top came and went), and one crop serves
+    the whole clip, so each side goes to where it is inside the camera in every frame that shows it. A side with
+    no clear edge near it in enough frames stays where it was drawn. Seen for real too: Claude's rectangle began
+    about 15 px above the camera, which put a black line into the clip."""
+    stack = np.stack([np.asarray(frame, dtype=np.float32) for frame in frames])
+    count, height, width = stack.shape
+    sx, sy = source[0] / width, source[1] / height
+    x, y, w, h = box[0] / sx, box[1] / sy, box[2] / sx, box[3] / sy
+    rows_along = slice(int(max(0, y + 0.15 * h)), int(min(height, y + 0.85 * h)))
+    columns_along = slice(int(max(0, x + 0.15 * w)), int(min(width, x + 0.85 * w)))
+    if rows_along.stop - rows_along.start < 2 or columns_along.stop - columns_along.start < 2:
+        return [int(round(v)) for v in box]
+    # per frame: how strong a vertical line is at each column, and a horizontal one at each row (index i: between
+    # i and i + 1), averaged along the part's side so that only lines as long as the side count
+    across = np.abs(np.diff(stack[:, rows_along, :], axis=2)).mean(axis=1)
+    down = np.abs(np.diff(stack[:, :, columns_along], axis=1)).mean(axis=2)
+
+    def bands(index: int, at: int, side: str) -> tuple[np.ndarray, np.ndarray]:
+        """The few lines just outside and just inside a side placed at `at`, along that side."""
+        frame = stack[index]
+        if side in ("top", "bottom"):
+            above, below = frame[max(0, at - 3):at, columns_along], frame[at:at + 3, columns_along]
+            return (above, below) if side == "top" else (below, above)
+        before, after = frame[rows_along, max(0, at - 3):at], frame[rows_along, at:at + 3]
+        return (before, after) if side == "left" else (after, before)
+
+    def edge(profiles: np.ndarray, at: float, size: int, side: str) -> int | None:
+        low, high = int(max(0, round(at - reach * size))), int(min(profiles.shape[1] - 1, round(at + reach * size)))
+        if high - low < 4:
+            return None
+        found = []
+        for index, profile in enumerate(profiles):
+            values = profile[low:high + 1]
+            floor = 4.0 * (float(np.median(values)) + 1.0)
+            for offset in np.argsort(values)[::-1]:  # the strongest lines first
+                if values[offset] <= 25 or values[offset] <= floor:
+                    break
+                position = low + int(offset) + 1  # the edge lies between this line and the next
+                outside, inside = bands(index, position, side)
+                # a camera's edge has the call's empty background outside it: dark and even. A line inside the
+                # picture (a door frame) has picture on both sides.
+                if (outside.size and inside.size and float(outside.mean()) < 40 and float(outside.std()) < 10
+                        and float(inside.mean()) > float(outside.mean()) + 20):
+                    found.append(position)
+                    break
+        if len(found) < max(2, count // 3):  # not a steady edge
+            return None
+        return max(found) if side in ("left", "top") else min(found)  # inside the camera in every frame
+
+    # a side drawn at the picture's own edge stays there: that edge is the camera's edge too
+    left = None if x <= 0.01 * width else edge(across, x, width, "left")
+    right = None if x + w >= 0.99 * width else edge(across, x + w, width, "right")
+    top = None if y <= 0.01 * height else edge(down, y, height, "top")
+    bottom = None if y + h >= 0.99 * height else edge(down, y + h, height, "bottom")
+    x0 = left if left is not None else x
+    x1 = right if right is not None else x + w
+    y0 = top if top is not None else y
+    y1 = bottom if bottom is not None else y + h
+    if x1 - x0 < 0.75 * w or y1 - y0 < 0.75 * h:  # not the camera's edges after all: keep it as drawn
+        return [int(round(v)) for v in box]
+    return [int(round(x0 * sx)), int(round(y0 * sy)), int(round((x1 - x0) * sx)), int(round((y1 - y0) * sy))]
+
+
 # ------------------------------------------------------------------------------------------------ Claude
 def _clip_time(t: float, segments: Sequence[Sequence[float]]) -> float:
     played = 0.0
@@ -636,7 +839,9 @@ def _transcript(state: dict[str, Any], sentences: Sequence[tuple[float, float, s
 
 def build_prompt(instruction: str, state: dict[str, Any], *, video_title: str, creator: str, duration: float,
                  sentences: Sequence[tuple[float, float, str]], segments: Sequence[Sequence[float]],
-                 fonts: Sequence[str], defaults: dict[str, Any] | None = None) -> str:
+                 fonts: Sequence[str], defaults: dict[str, Any] | None = None,
+                 frame: tuple[int, int] | None = None, picture_at: float | None = None,
+                 sheet: Sequence[str] = ()) -> str:
     """The request to Claude: what the user wants, the clip as it is, what can be changed, and what is said."""
     defaults = {**DEFAULTS, **(defaults or {})}
     st = state.get("settings") or {}
@@ -670,6 +875,25 @@ def build_prompt(instruction: str, state: dict[str, Any], *, video_title: str, c
         + (f"{state['cover_time']:.1f} s" if state.get("cover_time") is not None else "the best moment") + ".",
     ])
     styles = ", ".join(f"{key} ({label})" for key, label in PRESET_LABELS.items() if key in PRESETS)
+    if frame is not None:
+        seen = (f" at {clock(picture_at - state['start'])} of the clip" if picture_at is not None else "")
+        looking = (f"\nTwo pictures are attached. The first is one frame{seen}: the whole frame of the source video "
+                   f"({frame[0]}x{frame[1]}) before it is framed for the clip, picked as the one most like the rest "
+                   "of the clip. Give rectangles in percent of this first picture. The second shows "
+                   f"{len(sheet) or SHEET_FRAMES} small frames across the clip, left to right and top to bottom, each "
+                   f"with its time in the clip ({', '.join(sheet)}), to show whether the picture changes. If what the "
+                   "user wants is only visible at some times, or a camera moves or is missing at times, choose for "
+                   "the usual picture and say in not_possible when it differs: the layout cannot change during a "
+                   "clip.\n")
+        parts = ("""
+  With the picture you can also choose what the stacked layouts show: "top" and "bottom", each the rectangle
+  of the picture to show there, as [x, y, width, height] in percent of the picture (0 to 100). With "layout":
+  "split" each part gets half of the height: use it for two people or two cameras, and put the one the user
+  wants above in "top". With "facecam_top", "top" is the facecam and "bottom" the gameplay. Draw each
+  rectangle round the whole camera or area, inside its border.""")
+    else:
+        looking = "\nNo picture of the video is attached this time, so parts of the picture cannot be chosen.\n"
+        parts = ""
     layouts = ", ".join(f"{key} ({LAYOUT_LABELS[key]})" for key in LAYOUTS)
     return f"""You edit a short video clip that ClipForge, a clipping app, cut from a longer video. The user describes
 in their own words what they want changed. Turn that into changes ClipForge can make, and only those.
@@ -678,7 +902,7 @@ What the user wants:
 \"\"\"
 {instruction.strip()[:INSTRUCTION_MAX]}
 \"\"\"
-
+{looking}
 The clip now:
 {now}
 
@@ -700,7 +924,7 @@ What you can change (leave out everything that should stay as it is):
   false), "seconds" (how long it shows, 1 to 15).
 - "layout": an object with any of: "shape" ({", ".join(ASPECTS)}); "layout" ({layouts}); "zoom" (1 to 2.5, for the
   cropped layouts); "subject_x" (0 to 1: where the person to keep in frame is, from the left; null: found
-  automatically).
+  automatically).{parts}
 - "sound": an object with any of: "level_volume" (true or false), "reduce_noise" (true or false).
 - "title": the clip's title.
 - "thumbnail": an object with any of: "text" (2 to 6 words on the thumbnail), "word" (one of those words, shown in
@@ -744,10 +968,11 @@ def parse_answer(printed: str) -> Answer:
                   summary=" ".join(str(data.get("summary") or "").split())[:400])
 
 
-def ask(prompt: str, model: str) -> Answer:
-    """One request to Claude through the Claude Code tool (your plan, no tools of its own)."""
+def ask(prompt: str, model: str, pictures: Sequence[bytes] = ()) -> Answer:
+    """One request to Claude through the Claude Code tool (your plan, no tools of its own), with pictures of
+    the video when there are any."""
     try:
-        printed = claude_review.run_claude(prompt, model=model, timeout=ASK_TIMEOUT)
+        printed = claude_review.run_claude(prompt, model=model, timeout=ASK_TIMEOUT, pictures=pictures)
     except claude_review.ClaudeUnavailable as exc:
         raise DependencyMissing(exc.message.split(",")[0].rstrip(".") + ".", hint=exc.hint) from exc
     return parse_answer(printed)

@@ -66,6 +66,11 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
    ClipForge cannot do (music, sound effects, speed changes, stickers) is listed, never faked. **Undo this
    prompt edit** puts the clip back as it was and renders it again. One Claude request per edit, on your own
    plan. Parts left out are listed under the editor's timeline, where you can put each one back.
+   Claude also sees the video: a typical frame and a strip of frames across the clip. So *"her camera on top,
+   his camera under it"* in a recorded video call becomes a split screen of those two cameras, each fitted to
+   the camera's own edges, and Claude says when a camera is missing at times (one layout serves the whole clip).
+   To choose the two parts yourself, use **Choose the two parts…** in the editor's Layout tab (split screen or
+   facecam over gameplay): draw a box round what goes on top and one round what goes below on a large frame.
 6. **Download or export.** Download the MP4, SRT or VTT, or select clips in the Clip Library and export them
    to a folder with their thumbnails and a text file holding the title, TikTok caption, hashtags, source and
    rights note.

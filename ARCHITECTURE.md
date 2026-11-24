@@ -291,6 +291,23 @@ words and moment) is kept in `clips.last_edit` with what you asked and those lin
 of the queue. `POST .../prompt-edit/undo` puts the snapshot back and renders again. A clip that is rendering is
 left alone, since its render read the settings when it began. When nothing changed, nothing is saved or rendered.
 
+**The picture.** Two pictures go with the request, through the Claude Code tool's stream-json input (still
+no tools): the frame most like the rest of the clip (`typical_frame`: a call app may show one camera large for
+a while), at 1280 pixels, which Claude measures on, and a strip of eight small frames across the clip with their
+times, to see whether the picture changes. With them Claude may choose what the stacked layouts show: `top` and
+`bottom` rectangles in percent of the frame (`facecam_box` and `gameplay_box`). Each is kept inside the picture,
+refused when tiny, and moved onto the camera's own edges (`snap_part`): in each frame the strongest straight line
+near each side that has the call's dark, even background outside it, and the innermost of those, because a
+camera can move during the clip and one crop serves all of it. A side drawn at the picture's own edge stays
+there. A split screen half chosen is not made at all. Without pictures (they could not be taken) the parts
+cannot be chosen, and the request says so.
+
+**Split screen of two parts** (`reframe.plan_layout`): with both boxes, each fills half the height, cropped from
+its middle to the half's shape, a little inside its edges. Without them, split screen still looks for two faces;
+when it finds fewer, it shows the whole frame (a single small face may be a profile picture in a call app's
+member list), and crops around one face only when that face fills much of the frame. The editor's Layout tab
+draws the parts on a large frame of the clip (**Choose the two parts…**) and marks them on the live preview.
+
 Parts left out are a clip setting, `cuts`: `[from, to]` pairs in seconds of the source video.
 `pipeline.clip_segments` takes them out of the segments last (after pause tightening), so the render, the
 subtitles, the SRT and VTT files and the export checks all follow them, and the thumbnail is never taken from

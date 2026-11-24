@@ -388,11 +388,14 @@ def prompt_edit_clip(clip_id: int, body: PromptEditIn, session: Session = Depend
     video = get_video(session, clip.video_id)
     if clip.render_status in _RENDERING:
         raise Conflict("This clip is being rendered. Describe your change when it is done.")
-    storage.video_source_path(video)  # the source must still be here to render again
+    source = storage.video_source_path(video)  # the source must still be here to render again
     cfg = settings_store.get_all(session)
     if cfg["ai.engine"] != "claude":
         raise ClipForgeError("Claude is switched off in Settings (local rules only), so nothing is sent to it.",
                              hint="Switch the AI engine to Claude in Settings to use prompt edits.")
+    # Pictures of the video go with the request, so Claude sees where the people and cameras are.
+    pictures = prompt_edit.pictures_of(source, clip.start, clip.end)
+    frame = (video.width, video.height) if pictures.jpegs and video.width and video.height else None
     st = clip.settings or {}
     reach = prompt_edit.CONTEXT_SECONDS
     words = pipeline.load_words(session, video.id, max(0.0, clip.start - reach), clip.end + reach)
@@ -406,17 +409,19 @@ def prompt_edit_clip(clip_id: int, body: PromptEditIn, session: Session = Depend
     defaults = {"censor": bool(cfg["captions.censor"]), "normalize": bool(cfg["audio.normalize"])}
     prompt = prompt_edit.build_prompt(instruction, prompt_edit.snapshot(clip), video_title=video.title,
                                       creator=video.creator_name, duration=video.duration, sentences=sentences,
-                                      segments=segments, fonts=fonts, defaults=defaults)
+                                      segments=segments, fonts=fonts, defaults=defaults, frame=frame,
+                                      picture_at=pictures.at, sheet=pictures.labels)
     session.commit()  # nothing held open while Claude thinks
-    answer = prompt_edit.ask(prompt, str(cfg["ai.claude_model"]))
+    answer = prompt_edit.ask(prompt, str(cfg["ai.claude_model"]), pictures=pictures.jpegs if frame else ())
 
     session.refresh(clip)  # the clip as it is now: it may have been changed meanwhile
     if clip.render_status in _RENDERING:
         raise Conflict("This clip started rendering while Claude was answering, so nothing was changed. Try again "
                        "when it is done.")
     before = prompt_edit.snapshot(clip)
+    snap = ((lambda box: prompt_edit.snap_part(pictures.grey, box, frame)) if frame and pictures.grey else None)
     outcome = prompt_edit.make_changes(before, answer.changes, duration=video.duration, words=words, fonts=fonts,
-                                       defaults=defaults)
+                                       defaults=defaults, frame=frame, snap=snap)
     done, not_done = list(outcome.done), [*answer.not_possible, *outcome.not_done]
     if outcome.done or outcome.fixes:
         outcome.state["settings"] = merge_settings(outcome.state["settings"], {})  # the editor's own checks too

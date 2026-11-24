@@ -121,6 +121,12 @@ def _aspect_crop(region: tuple[float, float, float, float], ratio: float, cx: fl
     return max(rx, x), max(ry, y), w, h
 
 
+def _inset(box: tuple[float, ...], share: float = 0.02) -> tuple[float, float, float, float]:
+    """A chosen part, a little inside its edges: a frame drawn round a camera often takes in its border."""
+    x, y, w, h = (float(v) for v in box)
+    return x + w * share, y + h * share, w * (1 - 2 * share), h * (1 - 2 * share)
+
+
 def _centre(box: tuple[float, float, float, float]) -> tuple[float, float]:
     return box[0] + box[2] / 2, box[1] + box[3] / 2
 
@@ -212,9 +218,15 @@ def plan_layout(src_w: int, src_h: int, aspect: str, layout: str, faces: FaceSum
                       else "Face detection did not run, so the whole frame is kept visible.")
     elif layout == "facecam_top" and not cam_box:
         chosen, reason = "fit_blur", "No facecam was found for the stacked layout: showing the whole frame instead."
+    elif layout == "split" and facecam_box and gameplay_box:
+        reason = "Split screen of the two chosen parts: the first on top, the second below."
     elif layout == "split" and not (faces.face and faces.second):
-        chosen = "fill" if faces.face else "fit_blur"
-        reason = "Split screen needs two faces; fewer were found."
+        # Only a face that fills much of the frame is worth cropping around: a small one may be a profile picture
+        # in a call app's member list (seen for real), so the whole frame is shown instead.
+        chosen = "fill" if faces.face and faces.mode == "cam" else "fit_blur"
+        reason = ("Split screen needs two faces or two chosen parts; only one person was found, so the crop follows "
+                  "them." if chosen == "fill" else
+                  "Split screen needs two faces or two chosen parts; none were found, so the whole frame is shown.")
     plan.layout = chosen
     plan.reason = reason or f"Layout chosen by you: {LAYOUT_LABELS.get(chosen, chosen)}."
 
@@ -258,6 +270,13 @@ def plan_layout(src_w: int, src_h: int, aspect: str, layout: str, faces: FaceSum
         plan.bottom = {"crop": bottom, "height": bot_h}
         plan.caption_y = _clamp((top_h + 0.58 * bot_h) / out_h, SAFE_TOP, SAFE_BOTTOM)
         plan.hook_y = _clamp(top_h / out_h, 0.05, 0.60)
+
+    elif facecam_box and gameplay_box:  # split, of two parts you (or Claude) chose: each fills its half
+        top_h = _floor_even(out_h / 2)
+        bot_h = out_h - top_h
+        plan.top = {"crop": _aspect_crop(_inset(facecam_box), out_w / top_h), "height": top_h}
+        plan.bottom = {"crop": _aspect_crop(_inset(gameplay_box), out_w / bot_h), "height": bot_h}
+        plan.caption_y, plan.hook_y = 0.50, 0.12
 
     else:  # split
         top_h = _floor_even(out_h / 2)

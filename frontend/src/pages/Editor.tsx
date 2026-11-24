@@ -1,11 +1,12 @@
 // The clip editor: trim on a waveform, edit every caption word, restyle, reframe, then render.
 // Changes are kept in a draft with undo and redo, and only reach the clip when you save or render.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, Pause, Play, Redo2, RotateCcw, Save, Scissors, Undo2, Wand2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Crop, Download, Pause, Play, Redo2, RotateCcw, Save, Scissors, Undo2, Wand2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ClipThumb, ScoreRing } from "../components/clips";
 import { JobStages } from "../components/JobStages";
+import { describePart, PartsPicker } from "../components/partspicker";
 import { ThumbnailPanel, TikTokCaption } from "../components/thumbnail";
 import { snapTime, Timeline, type TimedWord } from "../components/Timeline";
 import { Badge, Button, Card, Empty, ErrorNote, Field, Input, NumberField, Segmented, Select, Spinner, Switch, Textarea, useToast } from "../components/ui";
@@ -84,6 +85,18 @@ function OutputPreview({ videoRef, video, draft, words, time, layout, cropX, pre
         onPointerMove={pan} onPointerUp={() => { dragging.current = false; }}>
         <video ref={videoRef} src={video.stream_url} playsInline preload="auto" className="absolute inset-0 h-full w-full"
           style={fill ? { objectFit: "cover", objectPosition: `${cropX * 100}% 50%`, transform: `scale(${draft.settings.zoom || 1})`, transformOrigin: `${cropX * 100}% 50%` } : { objectFit: "contain" }} />
+        {!fill && layout !== "fit_blur" && draft.settings.facecam_box && draft.settings.gameplay_box && video.width > 0 && video.height > 0 && (() => {
+          // where the letterboxed frame sits in the preview, then each part inside it
+          const frameWide = video.width / video.height > aw / ah;
+          const shownW = frameWide ? 100 : ((video.width / video.height) / (aw / ah)) * 100;
+          const shownH = frameWide ? ((aw / ah) / (video.width / video.height)) * 100 : 100;
+          const mark = (part: number[], label: string, tone: string) => (
+            <span key={label} className={cx("pointer-events-none absolute border", tone)} title={`${label} part`}
+              style={{ left: `${(100 - shownW) / 2 + (part[0] / video.width) * shownW}%`, top: `${(100 - shownH) / 2 + (part[1] / video.height) * shownH}%`,
+                width: `${(part[2] / video.width) * shownW}%`, height: `${(part[3] / video.height) * shownH}%` }} />
+          );
+          return <>{mark(draft.settings.facecam_box, "Top", "border-accent")}{mark(draft.settings.gameplay_box, "Bottom", "border-info")}</>;
+        })()}
         {hookOn && (
           <div className="pointer-events-none absolute inset-x-0 flex justify-center px-3" style={{ top: fill ? "13%" : "22%" }}>
             <span className="rounded bg-white px-2 py-1 text-center text-[11px] font-extrabold uppercase leading-tight text-black">{draft.hook_text}</span>
@@ -102,7 +115,7 @@ function OutputPreview({ videoRef, video, draft, words, time, layout, cropX, pre
         )}
       </div>
       <p className="mt-2 text-center text-xs text-faint">
-        {fill ? "Live preview. Drag sideways to choose what stays in frame." : layout === "fit_blur" ? "Live preview. The render adds a blurred copy of the picture behind it." : "Live preview of the whole frame. Render to see the stacked layout."}
+        {fill ? "Live preview. Drag sideways to choose what stays in frame." : layout === "fit_blur" ? "Live preview. The render adds a blurred copy of the picture behind it." : draft.settings.facecam_box && draft.settings.gameplay_box ? "Live preview of the whole frame, with the two chosen parts marked. Render to see them stacked." : "Live preview of the whole frame. Render to see the stacked layout."}
       </p>
     </div>
   );
@@ -228,8 +241,10 @@ function HookOptions({ draft, setField }: { draft: Draft; setField: (patch: Part
   );
 }
 
-function LayoutPanel({ draft, options, reason, setSettings }: { draft: Draft; options: Options; reason?: string; setSettings: (patch: Partial<ClipSettings>) => void }) {
+function LayoutPanel({ draft, options, reason, setSettings, video, time }: { draft: Draft; options: Options; reason?: string; setSettings: (patch: Partial<ClipSettings>) => void; video: Video; time: number }) {
   const s = draft.settings;
+  const [picking, setPicking] = useState(false);
+  const split = s.layout === "split";
   const box = s.facecam_box ?? [0, 0, 0, 0];
   const setBox = (index: number, value: number) => {
     const next = [...box];
@@ -265,6 +280,28 @@ function LayoutPanel({ draft, options, reason, setSettings }: { draft: Draft; op
             {["x", "y", "w", "h"].map((label, index) => <Input key={label} type="number" min={0} aria-label={label} placeholder={label} value={box[index] || ""} onChange={(event) => setBox(index, Number(event.target.value))} />)}
           </div>
         </Field>
+      )}
+      {(split || s.layout === "facecam_top") && (
+        <div className="space-y-2 rounded-xl border border-line bg-bg/60 p-3">
+          <p className="text-[12.5px] font-medium text-muted">{split ? "The two parts, one above the other" : "The facecam and the gameplay"}</p>
+          {s.facecam_box && s.gameplay_box ? (
+            <ul className="space-y-0.5 text-xs text-muted">
+              <li><span className="font-medium text-accent-soft">{split ? "Top" : "Facecam"}:</span> {describePart(s.facecam_box, video)}</li>
+              <li><span className="font-medium text-info">{split ? "Bottom" : "Gameplay"}:</span> {describePart(s.gameplay_box, video)}</li>
+            </ul>
+          ) : (
+            <p className="text-xs text-faint">{split
+              ? "Not chosen: ClipForge looks for two faces itself, which can pick the wrong ones (in a recorded video call, profile pictures). Choose the two parts on the picture."
+              : "Not chosen: ClipForge finds the facecam and frames the gameplay itself."}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setPicking(true)}><Crop className="h-3.5 w-3.5" />Choose the two parts…</Button>
+            {(s.facecam_box || s.gameplay_box) && <Button size="sm" variant="ghost" onClick={() => setSettings({ facecam_box: null, gameplay_box: null })}>Back to automatic</Button>}
+          </div>
+          <PartsPicker open={picking} onClose={() => setPicking(false)} video={video} time={time} start={draft.start} end={draft.end}
+            top={s.facecam_box ?? null} bottom={s.gameplay_box ?? null} topLabel={split ? "Top" : "Facecam"} bottomLabel={split ? "Bottom" : "Gameplay"}
+            onUse={(top, bottom) => setSettings({ facecam_box: top, gameplay_box: bottom })} />
+        </div>
       )}
       <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
         <Field label="Encode for">
@@ -691,7 +728,7 @@ export default function Editor() {
             options={[{ value: "captions", label: "Captions" }, { value: "style", label: "Style" }, { value: "layout", label: "Layout" }, { value: "thumbnail", label: "Thumbnail" }, { value: "details", label: "Details" }]} />
           {tab === "captions" && <CaptionsPanel draft={draft} words={words} edited={draft.captions !== null} time={time} onSeek={seek} onEdit={editWord} onReset={() => change({ ...draft, captions: null })} />}
           {tab === "style" && <StylePanel draft={draft} options={options.data} preset={preset} setCaptions={setCaptions} setSettings={setSettings} setField={setField} />}
-          {tab === "layout" && <LayoutPanel draft={draft} options={options.data} reason={plan?.reason} setSettings={setSettings} />}
+          {tab === "layout" && <LayoutPanel draft={draft} options={options.data} reason={plan?.reason} setSettings={setSettings} video={video.data} time={time} />}
           {tab === "thumbnail" && (
             <div className="space-y-5">
               <ThumbnailPanel clip={c} frameTime={() => time} />

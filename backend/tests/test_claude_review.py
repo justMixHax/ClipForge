@@ -219,3 +219,29 @@ def test_a_claude_tool_that_windows_will_not_start_counts_as_unavailable(monkeyp
         claude_review.run_claude("a transcript")
     assert "could not be started" in failed.value.message
 
+
+
+# ------------------------------------------------------------------------------------- with a picture
+def test_a_picture_goes_with_the_request_as_an_image_and_no_tools_are_switched_on():
+    import base64
+
+    line = claude_review.picture_message("Which camera is whose?", b"first jpeg", b"second jpeg")
+    content = json.loads(line)["message"]["content"]
+
+    assert [part["type"] for part in content] == ["image", "image", "text"]
+    assert content[0]["source"]["media_type"] == "image/jpeg"
+    assert [base64.b64decode(part["source"]["data"]) for part in content[:2]] == [b"first jpeg", b"second jpeg"]
+    assert content[2] == {"type": "text", "text": "Which camera is whose?"}
+    args = claude_review.command("claude", "sonnet", picture=True)
+    assert args[args.index("--input-format") + 1] == "stream-json"
+    assert args[args.index("--output-format") + 1] == "stream-json" and "--verbose" in args
+    assert args[args.index("--tools") + 1] == "" and "--bare" not in args
+
+
+def test_the_answer_to_a_request_with_a_picture_is_read_from_the_stream():
+    result = {"type": "result", "subtype": "success", "is_error": False, "result": '{"picks": []}'}
+    printed = "\n".join([json.dumps({"type": "system", "subtype": "init"}),
+                         json.dumps({"type": "assistant", "message": {"content": []}}), json.dumps(result)])
+
+    assert json.loads(claude_review.stream_result(printed)) == result
+    assert claude_review.stream_result("not json at all") == "not json at all"     # explained by the caller

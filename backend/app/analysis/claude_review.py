@@ -11,6 +11,7 @@ local scoring rules and says so on the job, so an analysis never fails because o
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -86,10 +87,34 @@ def _stop(proc: subprocess.Popen) -> None:
         pass
 
 
-def command(cli: str, model: str) -> list[str]:
-    # --bare is avoided on purpose: that mode only accepts an API key, not the plan's own sign-in.
-    return [cli, "-p", "--output-format", "json", "--model", model, "--tools", "",
+def command(cli: str, model: str, *, picture: bool = False) -> list[str]:
+    # --bare is avoided on purpose: that mode only accepts an API key, not the plan's own sign-in. A picture
+    # goes in as a stream-json message (no tool is needed to look at it), and the answer comes back as a stream.
+    talk = (["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"] if picture
+            else ["--output-format", "json"])
+    return [cli, "-p", *talk, "--model", model, "--tools", "",
             "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
+
+
+def picture_message(prompt: str, *jpegs: bytes) -> str:
+    """The request as one stream-json line: the pictures first, then the words."""
+    images = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                           "data": base64.b64encode(jpeg).decode("ascii")}} for jpeg in jpegs]
+    return json.dumps({"type": "user", "message": {"role": "user", "content": [
+        *images, {"type": "text", "text": prompt}]}})
+
+
+def stream_result(printed: str) -> str:
+    """The final answer of a stream-json run, in the shape a json run prints; what was printed when there is
+    none (the caller explains it)."""
+    for line in reversed(printed.splitlines()):
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            return json.dumps(event)
+    return printed
 
 
 # ------------------------------------------------------------------------------------------- the prompt
@@ -274,8 +299,10 @@ def ping(model: str = "haiku", timeout: float = 120) -> str:
 
 
 def run_claude(prompt: str, *, model: str = "sonnet", cli_path: str = "",
-               should_cancel: Callable[[], bool] | None = None, timeout: float = TIMEOUT_SECONDS) -> str:
-    """Send a prompt to Claude through the command-line tool and return what it printed."""
+               should_cancel: Callable[[], bool] | None = None, timeout: float = TIMEOUT_SECONDS,
+               pictures: Sequence[bytes] = ()) -> str:
+    """Send a prompt to Claude through the command-line tool and return what it printed. With pictures (JPEGs),
+    Claude sees them with the words."""
     cli = find_cli(cli_path)
     if cli is None:
         raise ClaudeUnavailable("The Claude Code command-line tool was not found on this PC, so the local rules "
@@ -284,11 +311,12 @@ def run_claude(prompt: str, *, model: str = "sonnet", cli_path: str = "",
     with tempfile.TemporaryDirectory(prefix="clipforge_claude_") as empty:  # no project files, no CLAUDE.md
         folder = Path(empty)
         prompt_file, out_file, err_file = folder / "prompt.txt", folder / "out.txt", folder / "err.txt"
-        prompt_file.write_text(prompt, encoding="utf-8")
+        prompt_file.write_text(picture_message(prompt, *pictures) + "\n" if pictures else prompt, encoding="utf-8")
         # prompt from a file and answers to files: nothing can block on a full pipe while the tool works
         with open(prompt_file, "rb") as source, open(out_file, "wb") as out, open(err_file, "wb") as err:
             try:
-                proc = subprocess.Popen(command(cli, model), stdin=source, stdout=out, stderr=err, cwd=empty,
+                proc = subprocess.Popen(command(cli, model, picture=bool(pictures)), stdin=source, stdout=out,
+                                        stderr=err, cwd=empty,
                                         env=child_env(), creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             except OSError as exc:
                 raise ClaudeUnavailable("The Claude Code tool could not be started, so the local rules picked the "
@@ -303,4 +331,6 @@ def run_claude(prompt: str, *, model: str = "sonnet", cli_path: str = "",
                     raise ClaudeUnavailable("Claude took too long to answer, so the local rules picked the clips.")
                 time.sleep(0.5)
         printed = out_file.read_text(encoding="utf-8", errors="replace")
+        if pictures:
+            printed = stream_result(printed)
         return printed if printed.strip() else err_file.read_text(encoding="utf-8", errors="replace")

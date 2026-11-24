@@ -842,7 +842,9 @@ def _render(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
 
     ctx.start("framing")
     manual = st.get("subject_x") is not None or bool(st.get("facecam_box"))
-    needs_faces = layout in ("auto", "split") or (layout in ("fill", "facecam_top") and not manual)
+    chosen_parts = bool(st.get("facecam_box") and st.get("gameplay_box"))
+    needs_faces = (layout == "auto" or (layout == "split" and not chosen_parts)
+                   or (layout in ("fill", "facecam_top") and not manual))
     faces = (analyze_faces(source, clip.start, clip.end - clip.start, video.width, video.height,
                            should_cancel=ctx.cancelled) if needs_faces else FaceSummary())
     plan = plan_layout(video.width, video.height, aspect, layout, faces, subject_x=st.get("subject_x"),

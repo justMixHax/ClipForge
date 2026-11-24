@@ -282,3 +282,37 @@ def test_a_gameplay_box_you_set_is_used_even_if_it_holds_the_facecam():
 
     x, y, w, h = plan.bottom["crop"]
     assert x + w <= 1200 and x < 560                   # inside your box, not moved away from the camera
+
+
+# ------------------------------------------------------------------- two parts of the picture, chosen
+# A Discord call recorded at 1920x1080: Jynxzi's camera tile on the left, the other person's on the right.
+JYNXZI_TILE, OTHER_TILE = (322.0, 320.0, 788.0, 442.0), (1120.0, 320.0, 790.0, 442.0)
+
+
+def test_a_split_screen_of_two_chosen_parts_stacks_them_in_equal_halves():
+    plan = plan_layout(1920, 1080, "9:16", "split", NO_FACES, facecam_box=OTHER_TILE, gameplay_box=JYNXZI_TILE)
+
+    assert plan.layout == "split" and "chosen" in plan.reason
+    assert plan.top["height"] == plan.bottom["height"] == 960
+    for part, tile in ((plan.top, OTHER_TILE), (plan.bottom, JYNXZI_TILE)):
+        x, y, w, h = part["crop"]
+        assert tile[0] <= x and x + w <= tile[0] + tile[2] and tile[1] <= y and y + h <= tile[1] + tile[3]
+        assert abs(w / h - 1080 / 960) < 0.02                                  # no stretching
+        assert abs((x + w / 2) - (tile[0] + tile[2] / 2)) < 4                  # the middle of the camera
+    assert "vstack" in build_filter(plan)
+
+
+def test_a_split_screen_without_two_faces_shows_the_whole_frame_not_a_crop_around_a_small_face():
+    # seen for real: the only "face" found was a profile picture in Discord's member list
+    avatar = FaceSummary(mode="facecam", face=(19.1, 175.0, 33.5, 44.7), facecam_box=(0, 156, 112, 84), frames=24,
+                         frames_with_face=24)
+
+    plan = plan_layout(1920, 1080, "9:16", "split", avatar)
+
+    assert plan.layout == "fit_blur" and "two" in plan.reason.lower()
+
+
+def test_a_split_screen_with_one_big_face_still_crops_around_it():
+    plan = plan_layout(1920, 1080, "9:16", "split", cam(800, 300, 300, 360))
+
+    assert plan.layout == "fill"

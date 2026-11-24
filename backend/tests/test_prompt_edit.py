@@ -187,6 +187,148 @@ def test_a_subject_position_crops_to_the_subject_as_the_editor_does():
     assert (st["subject_x"], st["layout"]) == (0.3, "fill")
 
 
+def framed(changes: dict) -> prompt_edit.Outcome:
+    """With the picture: one frame of a 1920x1080 source was sent with the request."""
+    return prompt_edit.make_changes(state(), changes, duration=600.0, words=WORDS, fonts=FONTS, frame=(1920, 1080))
+
+
+def test_two_parts_of_the_picture_go_on_top_and_below_in_a_split_screen():
+    # seen for real: "the female camera on top and Jynxzi's camera under it" in a recorded Discord call
+    outcome = framed({"layout": {"layout": "split", "top": [58.3, 29.6, 41.1, 40.9],
+                                 "bottom": {"x": 16.8, "y": 29.6, "w": 41.0, "h": 40.9}}})
+
+    st = outcome.state["settings"]
+    assert st["layout"] == "split"
+    assert st["facecam_box"] == [1119, 320, 789, 442] and st["gameplay_box"] == [323, 320, 787, 442]
+    assert any(line.startswith("Top part") for line in outcome.done)
+    assert any(line.startswith("Bottom part") for line in outcome.done)
+
+
+def test_a_part_off_the_picture_is_kept_inside_it():
+    outcome = framed({"layout": {"layout": "facecam_top", "top": [90, 10, 30, 30], "bottom": [0, 0, 100, 100]}})
+
+    assert outcome.state["settings"]["facecam_box"] == [1728, 108, 192, 324]      # cut at the right edge
+    assert outcome.state["settings"]["layout"] == "facecam_top"
+
+
+def test_a_split_screen_needs_both_parts_and_a_tiny_one_is_refused():
+    outcome = framed({"layout": {"layout": "split", "top": [58, 30, 41, 41], "bottom": [1, 1, 2, 2]}})
+
+    assert outcome.state == state() and outcome.done == []                        # nothing half done
+    assert any("too small" in line for line in outcome.not_done)
+
+
+def test_parts_are_only_kept_for_the_stacked_layouts():
+    outcome = framed({"layout": {"layout": "fill", "top": [58, 30, 41, 41], "bottom": [17, 30, 41, 41]}})
+
+    st = outcome.state["settings"]
+    assert st["layout"] == "fill" and "facecam_box" not in st and "gameplay_box" not in st
+    assert any("stacked" in line for line in outcome.not_done)
+
+
+def test_parts_of_the_picture_need_the_picture():
+    outcome = change({"layout": {"layout": "split", "top": [58, 30, 41, 41], "bottom": [17, 30, 41, 41]}})
+
+    assert outcome.state == state() and any("picture" in line for line in outcome.not_done)
+
+
+def test_the_picture_sent_is_the_one_most_like_the_rest_of_the_clip():
+    # seen for real: Discord showed both cameras most of the clip, and only one at its start and end
+    import numpy as np
+
+    both = np.zeros((36, 64)); both[10:26, 8:30] = 200; both[10:26, 34:56] = 180
+    one = np.zeros((36, 64)); one[4:34, 12:52] = 190
+
+    assert prompt_edit.typical_frame([one, both, both + 3, both - 2, one]) in (1, 2, 3)
+
+
+def test_frames_across_the_clip_are_shown_side_by_side_with_their_times():
+    import io
+
+    from PIL import Image
+
+    frames = [Image.new("RGB", (320, 180), (40 * i, 0, 0)) for i in range(5)]
+
+    sheet = Image.open(io.BytesIO(prompt_edit.frame_sheet(frames, ["0:00", "0:10", "0:20", "0:30", "0:40"])))
+
+    assert sheet.format == "JPEG" and sheet.size == (4 * 320, 2 * 180)
+
+
+def tile_frames(count: int = 8):  # noqa: ANN201
+    """Frames of a recorded call at 640x360: black, with one camera tile at x 100-400, y 80-250 whose picture
+    keeps changing."""
+    import numpy as np
+
+    rng = np.random.default_rng(7)
+    frames = []
+    for _ in range(count):  # a camera picture: smooth light that changes from frame to frame, a little noise
+        frame = np.zeros((360, 640), dtype=np.float32)
+        across = np.linspace(0, rng.uniform(-60, 60), 300)[None, :]
+        frame[80:250, 100:400] = rng.uniform(90, 170) + across + rng.normal(0, 3, size=(170, 300))
+        frames.append(np.clip(frame, 0, 255).astype(np.uint8))
+    return frames
+
+
+def test_a_part_drawn_round_a_camera_is_moved_onto_the_cameras_own_edges():
+    # seen for real: Claude's rectangle began about 15 px above the camera, so a black line showed in the clip
+    tile = [300, 240, 900, 510]                                  # the same tile at 1920x1080, three times larger
+    drawn = [300 + 24, 240 - 27, 900 - 30, 510 + 20]
+
+    snapped = prompt_edit.snap_part(tile_frames(), drawn, (1920, 1080))
+
+    assert all(abs(a - b) <= 3 for a, b in zip(snapped, tile)), snapped
+
+
+def test_a_camera_that_moves_during_the_clip_is_cropped_inside_it_in_every_frame():
+    # seen for real: Discord's tiles sat 18 px lower while a bar showed at its top
+    frames = tile_frames()
+    for frame in frames[:4]:                                      # lower by 6 px (18 at 1080) in half the frames
+        frame[86:256, 100:400] = frame[80:250, 100:400].copy()
+        frame[80:86, 100:400] = 0
+
+    snapped = prompt_edit.snap_part(frames, [300, 225, 900, 540], (1920, 1080))
+
+    assert abs(snapped[1] - 258) <= 3 and abs(snapped[1] + snapped[3] - 750) <= 3, snapped   # rows 86-250 at 1/3
+
+
+def test_a_line_inside_the_picture_is_not_taken_for_the_cameras_edge():
+    # seen for real: the white door frame in Jynxzi's room pulled the crop 95 px inwards
+    frames = tile_frames()
+    for frame in frames:
+        frame[80:250, 370:374] = 250                              # a bright, fixed line close to the right edge
+
+    snapped = prompt_edit.snap_part(frames, [300, 240, 900 + 20, 510], (1920, 1080))
+
+    assert abs(snapped[0] + snapped[2] - 1200) <= 3, snapped     # the tile's own edge, not the line
+
+
+def test_a_side_drawn_at_the_edge_of_the_picture_stays_there():
+    # a fixed line close to the top of the picture must not pull a part drawn from the very top down onto it
+    frames = tile_frames()
+    for frame in frames:
+        frame[10:12, :] = 255
+
+    assert prompt_edit.snap_part(frames, [300, 0, 900, 750], (1920, 1080))[:2] == [300, 0]
+
+
+def test_a_part_with_no_clear_edges_near_it_stays_as_drawn():
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    noise = [rng.integers(0, 255, size=(360, 640)).astype(np.uint8) for _ in range(8)]
+
+    assert prompt_edit.snap_part(noise, [300, 240, 900, 510], (1920, 1080)) == [300, 240, 900, 510]
+
+
+def test_parts_are_snapped_before_they_are_kept():
+    outcome = prompt_edit.make_changes(state(), {"layout": {"layout": "split", "top": [58, 30, 41, 41],
+                                                            "bottom": [17, 30, 41, 41]}},
+                                       duration=600.0, words=WORDS, fonts=FONTS, frame=(1920, 1080),
+                                       snap=lambda box: [v + 1 for v in box])
+
+    assert outcome.state["settings"]["facecam_box"] == [1115, 325, 788, 444]           # [1114, 324, 787, 443] + 1
+
+
 def test_what_clipforge_cannot_do_is_reported_not_faked():
     outcome = change({"speed": 1.5, "music": "lofi", "subtitles": {"wobble": True}})
 
@@ -300,6 +442,28 @@ def test_a_prompt_edit_changes_the_clip_and_renders_it_again(client: TestClient,
     assert edited["last_edit"]["instruction"] == "Bigger subtitles, and the hook should say New hook"
     assert "before" not in edited["last_edit"]                         # the copy for undo stays on this PC's side
     assert "Bigger subtitles, and the hook should say New hook" in asked[0] and "My pick" in asked[0]
+
+
+def test_a_picture_of_the_video_goes_with_the_request_so_parts_of_it_can_be_chosen(client: TestClient,  # noqa: F811
+                                                                                 clip: dict, claude: None,  # noqa: F811
+                                                                                 monkeypatch):  # noqa: ANN001
+    seen: dict = {}
+
+    def fake(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        seen["pictures"], seen["prompt"] = kw.get("pictures"), prompt
+        return json.dumps({"type": "result", "is_error": False, "result": json.dumps(
+            {"changes": {"layout": {"layout": "split", "top": [50, 0, 50, 100], "bottom": [0, 0, 50, 100]}},
+             "summary": "Right camera on top."})})
+
+    monkeypatch.setattr(claude_review, "run_claude", fake)
+
+    body = edit(client, clip, "The right camera on top, the left one below").json()
+
+    assert len(seen["pictures"]) == 2 and all(p[:2] == bytes([0xFF, 0xD8]) for p in seen["pictures"])  # JPEGs
+    assert "Two pictures are attached" in seen["prompt"] and "640x360" in seen["prompt"]
+    st = body["clip"]["settings"]
+    assert st["layout"] == "split"
+    assert st["facecam_box"] == [320, 0, 320, 360] and st["gameplay_box"] == [0, 0, 320, 360]
 
 
 def test_undo_puts_the_clip_back_as_it_was_and_renders_it_again(client: TestClient, clip: dict,  # noqa: F811
