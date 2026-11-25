@@ -1,5 +1,7 @@
 # Third-party software
 
+ClipForge's own code is under the MIT licence ([LICENSE](LICENSE)). This page is about everything else.
+
 ClipForge does not contain any of the software below: none of it is copied into this repository. Setup
 installs it on your PC from its own official source (PyPI, npm, GitHub, Hugging Face), and each part stays
 under its own licence. This page lists what is installed, from where, and under which licence, as read from

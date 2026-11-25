@@ -114,7 +114,7 @@ need publishing or analytics show a dash.
 | Testing | ✅ | 1,170 automated tests, run on one PC |
 | Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder, desktop shortcut |
 | Documentation | ✅ | |
-| Ready to be public | 🟡 | A contributing guide, third-party notices, a test that keeps folder paths from the author's PC and anything secret out of the repository, and a test workflow for GitHub. Still missing: a licence (the author's choice) and the first run on GitHub; see "Before the project is public" below |
+| Ready to be public | 🟡 | A contributing guide, third-party notices, a test that keeps folder paths from the author's PC and anything secret out of the repository, a test workflow for GitHub, and the MIT licence. Still missing: the first run on GitHub; see "Before the project is public" below |
 
 ## What I would do next, in order
 
@@ -175,7 +175,7 @@ For the author, who is the only one who can decide these:
 
 | What | Why |
 |---|---|
-| A licence file | Without one, nobody else may legally use or change the code, whatever the README says. MIT would match the projects ClipForge learned from |
+| ~~A licence file~~ | **Done on 24 November 2026:** the MIT licence, in `LICENSE`, the same one the projects ClipForge learned from use. Its copyright line names "The ClipForge AI authors"; put your own name there if you would rather be named |
 | Whether the existing Git history is published | Every commit carries its author's name and mail address. Publishing the history makes both public; starting the public repository from one fresh commit does not |
 | Private vulnerability reporting, switched on in the repository's settings | [SECURITY.md](SECURITY.md) sends security reports there |
 | The first run of the test workflow | `.github/workflows/tests.yml` has never run and may need adjusting |

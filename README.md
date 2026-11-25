@@ -196,6 +196,13 @@ Importing from a link works for public videos only. ClipForge never signs in to 
 browser's cookies, and does not work around age, member or region restrictions. An import does not start
 until you have said why you may clip that video, and your answer is stored with it.
 
+## Licence
+
+ClipForge AI is released under the [MIT licence](LICENSE): you may use, change and share it, also commercially,
+as long as the copyright notice stays with it. It comes without any warranty. The licence covers ClipForge's own
+code. The software that setup installs keeps its own licences
+([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)), and no licence here gives a right to anyone's videos.
+
 ## Third-party software
 
 ClipForge is built on other people's work, used under their licences:

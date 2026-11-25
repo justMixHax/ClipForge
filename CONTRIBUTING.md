@@ -80,6 +80,11 @@ be merged.
 - TypeScript: the interface talks to the backend only through `frontend/src/lib/api.ts`.
 - Keep a file's line endings as they are (`*.ps1` is CRLF; most other files are LF).
 
+## Licence
+
+ClipForge is under the [MIT licence](LICENSE). By sending a change you agree that it is offered under the same
+licence, and that it is yours to offer.
+
 ## Reporting a problem
 
 Open an issue with what you did, what you expected and what happened, and the last lines of
