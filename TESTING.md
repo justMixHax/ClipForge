@@ -29,8 +29,9 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 0 failed, 0 skipped, in 7 minutes 45 seconds.
 
 **On GitHub:** `.github/workflows/tests.yml` runs the fast suite and builds the interface on every push and
-pull request. It was written before the project had a GitHub repository and has never run; expect to adjust
-it on the first push.
+pull request, on GitHub's Windows machines. First run, 25 November 2026: the interface built in about a minute;
+of the backend tests, 1,160 passed, 1 was skipped (the caption-font test, as the optional fonts are not
+downloaded there) and 1 failed, in 18 minutes. The failure is in the table of defects below.
 
 ## How the tests are built
 
@@ -291,6 +292,7 @@ Kept here because a test suite that never finds anything proves little.
 | ChatGPT's review of Creator Discovery (24 November) | A creator marked "not allowed" could still be imported from by naming a right for that one video in a direct request (the page itself kept its button switched off); pressing "check for new videos" while a check of only the due channels was waiting got that smaller check | Yes, with four tests: the creator's record comes first, and a waiting check of the due channels becomes a check of all (one that has started gets a full one queued behind it) |
 | Reading the new code again after that review | A check that failed before reaching a channel was queued again every minute, for as long as ClipForge ran: a stored key that could not be read, or an answer from YouTube in a shape the code did not expect. Comments kept in an unexpected shape broke the list, and as a hint cost the whole analysis | Yes, with six tests: an answer that cannot be read stays with its channel, anything that stops a whole check pauses the checks by themselves, and a hint that cannot be read is left out |
 | Thinking a restored backup through | After the data folder moved to another PC or Windows account (or Windows was installed again), the key file could not be opened: saving any key again failed with a server error, and the Publishing Studio did not open | Yes, with two tests that use a key file Windows really refuses: saving a credential puts the old key file aside and starts a new one, the page opens and shows the app as not set up, and anything else says the stored sign-in cannot be read here and has to be entered again |
+| The first run on GitHub (25 November) | The test of cancelling FFmpeg asked to cancel only once FFmpeg reported progress, and GitHub's slower machine took almost seven minutes to report any for a 1080p encode, so the test failed although the cancel itself works | Yes: the test now asks to cancel after the first progress or after 3 seconds, and measures from that moment |
 | A new test failing with YouTube's real refusal | The test undid more than its own fault and with it the stand-in's address, so one request with a made-up key went to the real API (which refused it) | Yes: the test run now points the client at an address on this PC where nothing listens, for the whole run, so no test can reach the real API whatever it undoes; one test proves it |
 
 ## Not tested
@@ -306,7 +308,6 @@ Kept here because a test suite that never finds anything proves little.
   against a local stand-in; the first check of a real channel is the real test. Open until then: whether the
   units ClipForge counts match what Google's console shows, and how well "laughing" comments and written-down
   times point at funny moments on real channels (the counting is tested; what it is worth is not).
-- **The workflow on GitHub.** `.github/workflows/tests.yml` has never run.
 - **A first install on another PC.** Everything here ran on the author's PC. `setup.ps1` was run there over an
   existing install and creating a fresh Python environment, never on a PC that had none of it.
 - **Real streams: a handful.** The local rules were tuned on a synthetic sample. Since then a few real streams

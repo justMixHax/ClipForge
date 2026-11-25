@@ -69,17 +69,25 @@ def test_run_raises_a_useful_error_when_ffmpeg_fails(tmp_path: Path):
 
 
 def test_run_stops_quickly_when_cancelled_and_removes_the_partial_file(tmp_path: Path):
+    # Cancel once FFmpeg has reported progress, or after 3 seconds: a slow PC (GitHub's test machines) can take
+    # minutes to report the first progress of a heavy encode, and what is tested is how fast a cancel lands.
     out = tmp_path / "long.mp4"
     started = time.monotonic()
     progressed: list[float] = []
+    asked: list[float] = []
+
+    def cancel_now() -> bool:
+        if progressed or time.monotonic() - started > 3:
+            asked.append(asked[0] if asked else time.monotonic())
+            return True
+        return False
 
     with pytest.raises(JobCancelled):
         ffmpeg.run(["-f", "lavfi", "-t", "600", "-i", "testsrc2=s=1920x1080:r=30", "-c:v", "libx264",
                     "-preset", "medium", str(out)],
-                   duration=600.0, on_progress=progressed.append,
-                   should_cancel=lambda: len(progressed) >= 1, cleanup=[out])
+                   duration=600.0, on_progress=progressed.append, should_cancel=cancel_now, cleanup=[out])
 
-    assert time.monotonic() - started < 20
+    assert time.monotonic() - asked[0] < 10
     assert not out.exists()
 
 
