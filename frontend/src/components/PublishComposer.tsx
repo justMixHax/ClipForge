@@ -160,7 +160,7 @@ export function PublishComposer({ overview, onQueued }: { overview: PublishOverv
                         <Textarea rows={3} value={text.caption} onChange={(e) => setText(clip, { caption: e.target.value })} />
                       </Field>
                       <Field label="Hashtags" hint={`${splitTags(text.tags).length} hashtags`}>
-                        <Input value={text.tags} onChange={(e) => setText(clip, { tags: e.target.value })} placeholder="#funny #tyler1" />
+                        <Input value={text.tags} onChange={(e) => setText(clip, { tags: e.target.value })} placeholder="#funny #gaming" />
                       </Field>
                     </div>
                   </div>
