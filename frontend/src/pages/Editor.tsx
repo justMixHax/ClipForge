@@ -392,7 +392,11 @@ export default function Editor() {
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState<"" | "save" | "render">("");
   const [error, setError] = useState<unknown>(null);
-  const [windowRange, setWindowRange] = useState<{ from: number; to: number } | null>(null);
+  // The stretch of the source the timeline shows, kept with the clip it was made for. A window made for another clip
+  // does not count, so every clip gets its own, whether its data still has to load or was loaded already.
+  const [windowState, setWindowState] = useState<{ clipId: number; from: number; to: number } | null>(null);
+  const windowRange = windowState && windowState.clipId === id ? windowState : null;
+  const setWindowRange = useCallback((range: { from: number; to: number }) => setWindowState({ clipId: id, ...range }), [id]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Load the draft when another clip is opened (not on every refresh, so unsaved edits survive a re-render job).
@@ -408,11 +412,12 @@ export default function Editor() {
     setView(clip.data.render_status === "ready" ? "result" : "edit");
   }, [clip.data]);
 
+  // (It used to be cleared by a second effect whenever the clip changed. Opening a clip whose data was already loaded
+  // ran both in the same commit, set and then cleared, and the editor waited for a window that never came.)
   useEffect(() => {
-    if (!clip.data || !video.data || windowRange) return;
+    if (!clip.data || clip.data.id !== id || !video.data || windowRange) return;
     setWindowRange({ from: Math.max(0, clip.data.start - 20), to: Math.min(video.data.duration, clip.data.end + 20) });
-  }, [clip.data, video.data, windowRange]);
-  useEffect(() => { setWindowRange(null); }, [id]);
+  }, [clip.data, id, video.data, windowRange, setWindowRange]);
 
   const renderJob = (jobs.data ?? []).find((job) => job.clip_id === id && job.type === "render") ?? null;
   const wasRendering = useRef(false);
