@@ -61,24 +61,75 @@ After that: double-click **ClipForge** on your desktop to start it (if it is alr
 opens it). To stop it, press **Shut down ClipForge** at the bottom of the app's menu; a job that is running
 continues next time.
 
-## See it
+## Take the tour
 
-<p align="center">
-  <img src="docs/images/library.png" alt="The Clip Library: six clips, each with a thumbnail, a score and its checks" width="100%">
-</p>
+Every picture is a real screenshot of ClipForge. The clips are cut from *Sintel*, an open movie (credit below).
 
-The **Clip Library**: every clip gets a thumbnail with big words, a score, and checks that it plays, has sound and
-keeps its captions inside the frame. Two were picked and named by Claude from what is said; four are moments
-chosen by hand, three of them renamed in the editor because nothing is said in them.
+### Dashboard
+Your best clips, what this PC is doing, and a work log saying what ClipForge and Claude each did.
 
-<p align="center">
-  <img src="docs/images/dashboard.png" alt="The Dashboard: best clips, what each step did, and this PC's load" width="100%">
-</p>
+<p align="center"><img src="docs/images/dashboard.jpg" alt="The Dashboard: best clips, processing activity with a work log, and this PC's load" width="100%"></p>
 
-The **Dashboard**: the best clips, a work log saying what ClipForge and Claude each did, and what this PC is doing.
+### AI Clipper
+Add a video (upload, a link to a public video, or a file on your PC), pick how to clip it, and get ranked clips.
+Each one says who picked it, how sure the score is, and why.
 
-<sub>These clips are cut from [Sintel](https://durian.blender.org), © copyright Blender Foundation,
-licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).</sub>
+<p align="center"><img src="docs/images/clipper.jpg" alt="The AI Clipper: the source video and its rights, how to clip it, and the ranked clips" width="100%"></p>
+
+### Why this score
+Twelve sub-scores and the evidence behind each one, with the exact lines and times from the video.
+
+<p align="center"><img src="docs/images/clipper-why.jpg" alt="A clip's score broken down into twelve parts, with quoted evidence and timestamps" width="100%"></p>
+
+### Prompt edit
+Describe a change in your own words. Claude makes it and the clip is rendered again; one press undoes it.
+
+<p align="center"><img src="docs/images/prompt-edit.jpg" alt="The prompt edit box with an example request typed in" width="100%"></p>
+
+### Clip Library
+Every clip with its thumbnail, score and checks: it plays, has sound, and keeps its captions inside the frame.
+Filter, sort, approve, favourite, export.
+
+<p align="center"><img src="docs/images/library.jpg" alt="The Clip Library: six clips with thumbnails, scores, approvals and checks" width="100%"></p>
+
+### Video editor
+Trim on the waveform, fix any caption word, and change the caption style, layout, thumbnail and post text,
+with undo and redo.
+
+<table><tr>
+<td width="50%"><img src="docs/images/editor-captions.jpg" alt="The editor's captions tab: every word, editable, next to the rendered clip"></td>
+<td width="50%"><img src="docs/images/editor-style.jpg" alt="The editor's style tab: caption styles, font, size, colours and the hook title"></td>
+</tr></table>
+<table><tr>
+<td width="50%"><img src="docs/images/editor-layout.jpg" alt="The editor's layout tab: shape, layout, follow the person, zoom and sound"></td>
+<td width="50%"><img src="docs/images/editor-thumbnail.jpg" alt="The editor's thumbnail tab: thumbnail words, the TikTok caption and the YouTube text"></td>
+</tr></table>
+
+### Creator Discovery
+Follow the YouTube channels you clip from and see their new videos with what viewers say about them. It uses
+YouTube's official API with a free key of your own; this is the screen before the key is added.
+
+<p align="center"><img src="docs/images/discovery.jpg" alt="Creator Discovery before a key is added: the four steps to get a free YouTube API key" width="100%"></p>
+
+### Publishing Studio
+Post approved clips to YouTube Shorts, TikTok (as drafts) and Instagram Reels, now or on a schedule, through each
+platform's official API and your own sign-in. Each platform walks you through its one-time setup.
+
+<table><tr>
+<td width="50%"><img src="docs/images/publishing-new.jpg" alt="Publishing Studio: a new post with three approved clips to pick from"></td>
+<td width="50%"><img src="docs/images/publishing-accounts.jpg" alt="Publishing Studio accounts: the one-time setup for YouTube, TikTok and Instagram"></td>
+</tr></table>
+
+### Settings
+What this PC can do, tested rather than guessed: graphics card, speech models, storage, and the honest status of
+every part of ClipForge.
+
+<p align="center"><img src="docs/images/settings.jpg" alt="Settings: this PC's tested hardware, speech models and storage" width="100%"></p>
+
+<sub>The clips in these pictures are cut from [Sintel](https://durian.blender.org), © copyright Blender
+Foundation, licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Two
+were picked and named by Claude; four are moments chosen by hand, three of them renamed in the editor because
+nothing is said in them.</sub>
 
 ## Using it
 
