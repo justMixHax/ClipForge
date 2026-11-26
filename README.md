@@ -1,20 +1,32 @@
+<p align="center">
+  <img src="docs/images/banner.png" alt="ClipForge: the free, open-source clipping studio for clippers" width="100%">
+</p>
+
+<p align="center">
+  <img alt="Free" src="https://img.shields.io/badge/price-free-ff7a3d">
+  <img alt="Open source, MIT licence" src="https://img.shields.io/badge/licence-MIT-ff7a3d">
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/runs%20on-Windows%2010%20%7C%2011-2b3240">
+  <img alt="Install by asking your AI" src="https://img.shields.io/badge/install-ask%20your%20AI-2b3240">
+</p>
+
 # ClipForge AI
 
-A clipping studio that runs on your own Windows PC. You give it a long video, or follow the channels you clip
-from; it transcribes the video, finds the moments most likely to work as short clips, explains why it picked
-each one, and renders them as vertical videos with burned-in captions and a thumbnail. You review, edit,
-approve and download them in the browser at `http://localhost:3000`.
+**The free, open-source clipping studio for clippers.** Give it a long stream or video. It finds the moments most
+likely to work as short clips, tells you why it picked each one, and cuts them into vertical clips with captions
+and a thumbnail, ready to post. Everything runs on your own Windows PC, in your browser at `http://localhost:3000`.
 
-**It uses the Claude you already have.** With [Claude Code](https://claude.com/claude-code) installed and signed
-in, Claude picks the clips, makes the edits you describe in your own words and writes the post text, through
-your own Claude plan: no API key, no extra bill. ChatGPT can give a second opinion the same way, through the
-Codex tool of the ChatGPT app. Without either, ClipForge still works: its own rules pick the clips, and no
-transcript leaves the PC.
-
-Your videos stay on your PC. When Claude picks, it gets the transcript, not the video; a prompt edit also shows
-it two still pictures of that clip. A clip is uploaded only when you publish it yourself. There is no account,
-no telemetry and no update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network and
-when.
+- **Free, for real.** MIT licence: no subscription, no account, no watermark on your clips.
+- **Your own Claude picks the clips.** With [Claude Code](https://claude.com/claude-code) signed in, Claude finds
+  the moments, writes the titles and post text, and makes edits you describe in plain words ("bigger yellow
+  subtitles, cut the part where he reads chat"), all on the Claude plan you already have, with no API key and no
+  extra bill. ChatGPT can give a second opinion the same way. Without either, ClipForge's own rules pick.
+- **Ready to post.** 9:16, 1:1, 4:5 or 16:9; captions word by word in six styles or your own; a hook title; a
+  thumbnail with big words; a TikTok caption and hashtags.
+- **Built for clippers.** Facecam and gameplay layouts, game vocabularies (GTA, DayZ, EA Sports FC, Roblox), clips
+  from your own timestamps, a score for every clip with the reasons behind it, and Creator Discovery to follow
+  the YouTube channels you clip from.
+- **Your videos stay on your PC.** When Claude picks, it gets the transcript, not the video. No telemetry, no
+  update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network, and when.
 
 **Status.** Built and tested by one person on one PC, with more than 1,100 automated tests. Clipping, editing
 and thumbnails are used on real streams. Publishing and Creator Discovery are built and tested against local
@@ -42,6 +54,25 @@ and troubleshooting.
 After that: double-click **ClipForge** on your desktop to start it (if it is already running, the shortcut just
 opens it). To stop it, press **Shut down ClipForge** at the bottom of the app's menu; a job that is running
 continues next time.
+
+## See it
+
+<p align="center">
+  <img src="docs/images/library.png" alt="The Clip Library: six clips, each with a thumbnail, a score and its checks" width="100%">
+</p>
+
+The **Clip Library**: every clip gets a thumbnail with big words, a score, and checks that it plays, has sound and
+keeps its captions inside the frame. Two were picked and named by Claude from what is said; four are moments
+chosen by hand, three of them renamed in the editor because nothing is said in them.
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="The Dashboard: best clips, what each step did, and this PC's load" width="100%">
+</p>
+
+The **Dashboard**: the best clips, a work log saying what ClipForge and Claude each did, and what this PC is doing.
+
+<sub>These clips are cut from [Sintel](https://durian.blender.org), © copyright Blender Foundation,
+licensed under [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).</sub>
 
 ## Using it
 
