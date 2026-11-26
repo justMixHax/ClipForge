@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
+import psutil
 
 from ..config import get_settings
 from ..errors import DependencyMissing, JobCancelled, MediaError
@@ -150,6 +151,25 @@ def _remove(paths: Sequence[Path]) -> None:
                 time.sleep(0.2)
 
 
+def _stop(proc: subprocess.Popen) -> None:
+    """Stop FFmpeg and anything it started, then wait for it.
+
+    The ffmpeg on PATH can be a launcher (Chocolatey's shims are) that starts the real ffmpeg.exe. Killing only the
+    launcher leaves the real one encoding, holding the output pipes open, so a cancel would take minutes to land."""
+    if proc.poll() is None:
+        try:
+            children = psutil.Process(proc.pid).children(recursive=True)
+        except psutil.Error:
+            children = []
+        proc.kill()
+        for child in children:
+            try:
+                child.kill()
+            except psutil.Error:
+                pass  # it already ended
+    proc.wait()
+
+
 def run(args: Sequence[str], *, duration: float | None = None,
         on_progress: Callable[[float], None] | None = None,
         should_cancel: Callable[[], bool] | None = None, cwd: Path | None = None,
@@ -199,9 +219,8 @@ def run(args: Sequence[str], *, duration: float | None = None,
                 best = 1.0
                 on_progress(1.0)
     finally:
-        if proc.poll() is None:
-            proc.kill()
-        returncode = proc.wait()
+        _stop(proc)
+        returncode = proc.returncode
         for t in readers:
             t.join(timeout=5)
         for stream in (proc.stdout, proc.stderr):
@@ -254,10 +273,8 @@ def iter_frames(path: Path, *, fps: float, width: int, height: int, pix_fmt: str
             frame = np.frombuffer(buffer, dtype=np.uint8)
             yield frame.reshape((height, width) if channels == 1 else (height, width, channels))
     finally:
-        if proc.poll() is None:
-            proc.kill()
+        _stop(proc)
         proc.stdout.close()
-        proc.wait()
 
 
 def extract_audio(src: Path, dst: Path, *, sample_rate: int = 16000, duration: float | None = None,

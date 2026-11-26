@@ -69,8 +69,8 @@ def test_run_raises_a_useful_error_when_ffmpeg_fails(tmp_path: Path):
 
 
 def test_run_stops_quickly_when_cancelled_and_removes_the_partial_file(tmp_path: Path):
-    # Cancel once FFmpeg has reported progress, or after 3 seconds: a slow PC (GitHub's test machines) can take
-    # minutes to report the first progress of a heavy encode, and what is tested is how fast a cancel lands.
+    # Cancel once FFmpeg has reported progress, or after 3 seconds: a slow PC can be late with the first progress
+    # of a heavy encode, and what is tested is how fast a cancel lands.
     out = tmp_path / "long.mp4"
     started = time.monotonic()
     progressed: list[float] = []
@@ -89,6 +89,34 @@ def test_run_stops_quickly_when_cancelled_and_removes_the_partial_file(tmp_path:
 
     assert time.monotonic() - asked[0] < 10
     assert not out.exists()
+
+
+def test_stopping_a_launcher_also_stops_the_program_it_started():
+    # Chocolatey puts a small launcher in front of ffmpeg.exe. Killing only the launcher left the real FFmpeg
+    # encoding for minutes, holding the output pipes open, so a cancel took that long to land.
+    import sys
+
+    import psutil
+
+    # The real interpreter, not a venv's python.exe: that is itself a launcher, and it stops its child on exit.
+    python = getattr(sys, "_base_executable", sys.executable)
+    child_code = "import time; time.sleep(120)"
+    launcher_code = ("import subprocess, sys; "
+                     f"subprocess.Popen([sys.executable, '-c', {child_code!r}]).wait()")
+    launcher = subprocess.Popen([python, "-c", launcher_code], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + 15
+    while not psutil.Process(launcher.pid).children() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    (child,) = psutil.Process(launcher.pid).children()
+
+    try:
+        ffmpeg._stop(launcher)
+
+        assert launcher.poll() is not None
+        child.wait(timeout=5)  # raises psutil.TimeoutExpired while it is still running
+    finally:
+        if child.is_running():
+            child.kill()
 
 
 def test_gray_frames_have_the_requested_size_and_count(tiny_video: Path):
