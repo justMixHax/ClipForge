@@ -31,7 +31,9 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 **On GitHub:** `.github/workflows/tests.yml` runs the fast suite and builds the interface on every push and
 pull request, on GitHub's Windows machines. First run, 25 November 2026: the interface built in about a minute;
 of the backend tests, 1,160 passed, 1 was skipped (the caption-font test, as the optional fonts are not
-downloaded there) and 1 failed, in 18 minutes. The failure is in the table of defects below.
+downloaded there) and 1 failed, in 18 minutes. The failure is in the table of defects below. The second run
+failed the same way. After the fix, 26 November 2026: 1,169 passed, 1 skipped (the same font test) and none
+failed, in 15 minutes 28 seconds; the 8 tests that need the speech model are left out there by design.
 
 ## How the tests are built
 

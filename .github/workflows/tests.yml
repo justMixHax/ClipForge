@@ -1,6 +1,6 @@
 # Runs the tests on every push and pull request.
 #
-# First run on 25 November 2026: see "On GitHub" in TESTING.md. The backend job takes about 18 minutes.
+# Results so far: see "On GitHub" in TESTING.md. The backend job takes about 16 minutes.
 #
 # What it does: the backend tests that need no speech model (FFmpeg is installed for the render tests), then a
 # type-check and build of the interface. Nothing here calls Claude, ChatGPT or any platform: the tests use
