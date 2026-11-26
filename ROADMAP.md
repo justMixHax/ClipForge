@@ -180,15 +180,15 @@ account or key of your own, which only you can make:
 | Instagram | A Meta developer app, their review, and a professional Instagram account |
 | Importing from a link | Nothing more: public videos only, without sign-ins (decided on 21 November 2026) |
 
-## Before the project is public
+## Going public
 
-For the author, who is the only one who can decide these:
+**Public since 26 November 2026**, with the first release, v0.1.0. What had to be settled first:
 
 | What | Why |
 |---|---|
 | ~~A licence file~~ | **Done on 24 November 2026:** the MIT licence, in `LICENSE`, the same one the projects ClipForge learned from use. Its copyright line names "The ClipForge AI authors"; put your own name there if you would rather be named |
-| ~~Whether the existing Git history is published~~ | **Done on 25 November 2026:** every commit carries the author's GitHub name and GitHub's private no-reply address, and old file versions no longer name the author. The repository is on GitHub, private for now |
-| Private vulnerability reporting, switched on in the repository's settings | [SECURITY.md](SECURITY.md) sends security reports there. GitHub offers it for public repositories, so it is switched on when the repository goes public |
+| ~~Whether the existing Git history is published~~ | **Done on 25 November 2026:** every commit carries the author's GitHub name and GitHub's private no-reply address, and old file versions no longer name the author. Checked again for keys and personal details before going public |
+| ~~Private vulnerability reporting~~ | **Switched on on 26 November 2026**, when the repository went public. [SECURITY.md](SECURITY.md) sends security reports there: **Report a vulnerability** under the Security tab |
 | ~~The first run of the test workflow~~ | **Ran on 25 November 2026:** the interface built, and 1,160 of the 1,161 backend tests passed on GitHub's machine. The one failure was a test that measured the speed of the machine rather than the cancel it was meant to check; it was fixed |
 
 ## Known limitations
