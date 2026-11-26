@@ -345,7 +345,15 @@ class ScoringContext:
                          + 3 * oc.story + 3 * oc.humor + 3 * (oc.win + oc.fail))
         loud_points = _clip((open_loud - 2.0) * 1.5, 0.0, 12.0)
         early_points = 8 if early_words >= 7 else 4 if early_words >= 5 else -10 if early_words <= 2 else 0
-        hook = (30 + cue_points + (10 if open_question else 0) + (5 if oc.exclaim else 0) + (3 if oc.numbers else 0)
+        # What stops a scroll is something happening on screen in the first seconds, not only the words.
+        open_vis = self._visual_stats(start, min(end, start + 3.0))
+        if open_vis is None:
+            picture_points = 0.0
+        elif open_vis["static"] > 0.9:
+            picture_points = -6.0
+        else:
+            picture_points = min(8.0, 10 * open_vis["activity"]) + (3 if open_vis["cuts"] >= 1 else 0)
+        hook = (30 + cue_points + picture_points + (10 if open_question else 0) + (5 if oc.exclaim else 0) + (3 if oc.numbers else 0)
                 + min(5.0, 2.5 * oc.second_person) + loud_points
                 + (8 if lead_gap >= 0.6 else 4 if lead_gap >= 0.3 else 0) + early_points
                 - (22 if oc.filler_start else 0) - (18 if oc.dependent_start else 0)
@@ -371,6 +379,10 @@ class ScoringContext:
                 add("hook", -18, "The first line leans on something said earlier", start, opener)
             if early_points < 0:
                 add("hook", early_points, "Slow start: almost nothing is said in the first 3 seconds", start)
+            if picture_points >= 4:
+                add("hook", picture_points, "The picture moves in the first seconds", start)
+            elif picture_points < 0:
+                add("hook", picture_points, "The picture is still in the first seconds", start)
             if oc.housekeeping:
                 add("hook", -min(15.0, 10 * oc.housekeeping), "Opens on stream housekeeping", start, opener)
 

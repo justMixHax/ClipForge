@@ -120,7 +120,7 @@ model nobody can inspect. It lives in `backend/app/analysis/`.
 
    | Sub-score | Looks at |
    |---|---|
-   | Opening hook | The first line: questions, strong claims, direct address; penalised for filler openings and replies that need the previous line |
+   | Opening hook | The first line: questions, strong claims, direct address; penalised for filler openings and replies that need the previous line. Also whether the picture moves or cuts in the first 3 seconds, since what stops a scroll is often visual |
    | Entertainment | Humour, surprise, conflict and reaction cues in the words, backed by voice energy |
    | Emotional impact | Emotional language and how far the voice rises above the surrounding minutes |
    | Clear without context | Starts at the start of a thought, no dangling "and then he...", no change of subject midway |
@@ -149,6 +149,9 @@ model nobody can inspect. It lives in `backend/app/analysis/`.
    or one second, if more than 55% of its distinctive words match one (the same story told twice), or if it
    matches a clip you already have.
 6. **Describing** (`describe.py`). Title, hook options and hashtags are taken from the words that were spoken.
+   Hashtags are specific first (game, creator, category, preset) and never general ones like `#fyp`, which
+   would push the clip at everyone rather than at people who would watch it. The credit names the creator's
+   `@handle` when the source gives one.
    Nothing is invented. When Claude wrote no thumbnail words, they come from the title the same way: filler at
    the start and small words at the end are left out, a phrase said over and over counts once, and the word in
    colour is a price or number when there is one, else the last real word.

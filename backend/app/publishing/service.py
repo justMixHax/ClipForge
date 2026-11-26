@@ -4,7 +4,7 @@ and disconnecting accounts.
 Safeguards, checked when a post is queued and again just before it is sent:
 - only clips you approved, rendered, from a source whose right to post you recorded (owned, licensed, permission);
 - the same clip goes to the same account once, unless you tick "post again";
-- no account gets more than the daily limit (Settings) within 24 hours;
+- no account gets more than the daily limit (Settings) within 24 hours, nor two posts closer than the gap (Settings);
 - a post counts as published only once the platform confirms it; a passing problem is tried again twice, then
   reported; a sign-in the platform no longer accepts marks the account to reconnect.
 """
@@ -57,6 +57,10 @@ class PostRequest:
 
 def daily_limit(session: Session) -> int:
     return max(1, int(settings_store.get(session, "publish.daily_limit") or 6))
+
+
+def min_gap_hours(session: Session) -> float:
+    return max(0.0, float(settings_store.get(session, "publish.min_gap_hours") or 0))
 
 
 def _clock(moment: datetime) -> str:
@@ -141,6 +145,7 @@ def queue_posts(session: Session, requests: list[PostRequest], *, post_again: bo
     if len(requests) > 100:
         raise ClipForgeError("At most 100 posts can be queued at once.")
     limit = daily_limit(session)
+    gap = min_gap_hours(session)
     problems: list[str] = []
     planned: dict[int, list[datetime]] = {}
     rows: list[Post] = []
@@ -183,6 +188,12 @@ def queue_posts(session: Session, requests: list[PostRequest], *, post_again: bo
         if sum(abs((t - moment).total_seconds()) < 86400 for t in times + planned.get(account.id, [])) >= limit:
             problems.append(f"{account.name} on {label} would get more than {limit} posts in 24 hours. Spread them "
                             "out, or raise the limit in Settings.")
+            continue
+        if gap and any(abs((t - moment).total_seconds()) < gap * 3600 for t in times + planned.get(account.id, [])):
+            hours = f"{gap:g}"
+            problems.append(f"{account.name} on {label} would get two posts less than {hours} hours apart. Leave "
+                            f"at least {hours} hours between posts on one account (the platform needs that long to "
+                            "see how one does before the next), or change the gap in Settings.")
             continue
         planned.setdefault(account.id, []).append(moment)
         rows.append(Post(clip_id=clip.id, account_id=account.id, platform=account.platform, status="scheduled",

@@ -529,6 +529,7 @@ export interface PublishOverview {
   platforms: PublishPlatform[];
   accounts: PublishAccount[];
   daily_limit: number;
+  min_gap_hours: number;
 }
 
 export interface PublishPost {

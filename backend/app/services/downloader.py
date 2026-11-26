@@ -63,6 +63,7 @@ class LinkInfo:
     width: int | None
     height: int | None
     retries: int = 0            # times the download was refused part-way and continued
+    creator_handle: str = ""    # the creator's @name on the site, when it has one (YouTube does)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -307,11 +308,18 @@ def _describe(info: dict[str, Any], url: str) -> LinkInfo:
         url=str(info.get("webpage_url") or url), title=str(info.get("title") or "").strip()[:300] or "Untitled video",
         creator=str(info.get("channel") or info.get("uploader") or info.get("creator") or "").strip()[:200],
         creator_url=str(info.get("channel_url") or info.get("uploader_url") or ""),
+        creator_handle=_handle(info.get("uploader_id")),
         site=str(info.get("extractor_key") or ""), video_id=str(info.get("id") or ""),
         duration=float(duration) if duration else None,
         is_live=bool(info.get("is_live")) or info.get("live_status") in ("is_live", "is_upcoming"),
         license=str(info.get("license") or ""), approx_bytes=approx or None,
         width=info.get("width"), height=info.get("height"))
+
+
+def _handle(uploader_id) -> str:  # noqa: ANN001
+    """The uploader id when it is a handle ("@blender"); nothing for a channel id ("UCabc...")."""
+    text = str(uploader_id or "").strip()
+    return text[:200] if text.startswith("@") and len(text) > 1 and " " not in text else ""
 
 
 def _refuse_if_unsuitable(found: LinkInfo, max_bytes: int | None) -> None:

@@ -75,6 +75,8 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "llm.allow_paid": (False, _flag),
     "notifications.browser": (True, _flag),
     "publish.daily_limit": (6, _number(1, 25)),
+    # the least time between two posts on one account, so the platform can see how one does before the next; 0: none
+    "publish.min_gap_hours": (3, _number(0, 48)),
     # how often followed channels are looked at by themselves while ClipForge runs; 0: only when you press Check
     "discovery.check_hours": (6, _number(0, 168)),
 }

@@ -134,13 +134,14 @@ def test_the_same_clip_is_not_posted_twice_to_one_account_unless_you_say_so(worl
     with db.session_scope() as s, pytest.raises(ClipForgeError, match="already"):
         service.queue_posts(s, [ask(world)], now=NOW)
     with db.session_scope() as s:
+        settings_store.set_many(s, {"publish.min_gap_hours": 0})   # the gap has a test of its own
         assert len(service.queue_posts(s, [ask(world)], post_again=True, now=NOW)) == 1
         assert len(service.queue_posts(s, [ask(world, "tiktok")], now=NOW)) == 1   # another account is fine
 
 
 def test_no_account_gets_more_than_the_daily_limit(world: dict[str, int]):
     with db.session_scope() as s:
-        settings_store.set_many(s, {"publish.daily_limit": 2})
+        settings_store.set_many(s, {"publish.daily_limit": 2, "publish.min_gap_hours": 0})
         service.queue_posts(s, [ask(world), ask(world)], post_again=True, now=NOW)
         with pytest.raises(ClipForgeError, match="2 posts in 24 hours"):
             service.queue_posts(s, [ask(world)], post_again=True, now=NOW)
@@ -359,3 +360,28 @@ def test_an_unexpected_error_while_checking_stops_the_checks(world: dict[str, in
     assert stopped.status == "failed" and "unexpected" in stopped.error and stopped.next_run_at is None
     with db.session_scope() as s:
         assert service.enqueue_due(s) == 0
+
+
+def test_posts_on_one_account_are_kept_hours_apart_so_the_platform_can_judge_each(world: dict[str, int]):
+    # The default gap is 3 hours; a platform needs that long to see how the first post does before the next.
+    with db.session_scope() as s:
+        service.queue_posts(s, [ask(world)], now=NOW)
+        with pytest.raises(ClipForgeError, match="3 hours"):
+            service.queue_posts(s, [ask(world, scheduled_at=NOW + timedelta(hours=1))], post_again=True, now=NOW)
+        with pytest.raises(ClipForgeError, match="3 hours"):   # two in one request, too close to each other
+            service.queue_posts(s, [ask(world, scheduled_at=NOW + timedelta(hours=5)),
+                                    ask(world, scheduled_at=NOW + timedelta(hours=6))], post_again=True, now=NOW)
+        assert len(service.queue_posts(s, [ask(world, scheduled_at=NOW + timedelta(hours=3, minutes=1))],
+                                       post_again=True, now=NOW)) == 1
+        assert len(service.queue_posts(s, [ask(world, "tiktok", scheduled_at=NOW + timedelta(hours=1))],
+                                       now=NOW)) == 1   # another account is not affected
+
+
+def test_the_gap_between_posts_can_be_changed_or_switched_off(world: dict[str, int]):
+    with db.session_scope() as s:
+        settings_store.set_many(s, {"publish.min_gap_hours": 0})
+        service.queue_posts(s, [ask(world), ask(world, scheduled_at=NOW + timedelta(minutes=10))], post_again=True,
+                            now=NOW)
+        settings_store.set_many(s, {"publish.min_gap_hours": 12})
+        with pytest.raises(ClipForgeError, match="12 hours"):
+            service.queue_posts(s, [ask(world, scheduled_at=NOW + timedelta(hours=8))], post_again=True, now=NOW)

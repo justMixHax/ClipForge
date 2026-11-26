@@ -237,13 +237,14 @@ def enqueue_render(session: Session, clip: Clip, priority: int = 5) -> Job:
 
 
 def enqueue_import(session: Session, url: str, *, permission_status: str, permission_note: str = "",
-                   creator_name: str = "", title: str | None = None, project_id: int | None = None,
-                   max_height: int = 1080, analyze: dict[str, Any] | None = None) -> Job:
+                   creator_name: str = "", creator_handle: str = "", title: str | None = None,
+                   project_id: int | None = None, max_height: int = 1080, analyze: dict[str, Any] | None = None) -> Job:
     """Queue the import of one video from a link. The link must already have been checked by
     downloader.validate_source_url. The folder it will be saved in is chosen now, so a download that is
     interrupted by closing the app continues in the same place."""
     payload = {"url": url, "permission_status": permission_status, "permission_note": permission_note,
-               "creator_name": creator_name, "title": title, "project_id": project_id, "max_height": max_height,
+               "creator_name": creator_name, "creator_handle": creator_handle, "title": title,
+               "project_id": project_id, "max_height": max_height,
                "analyze": analyze, "storage_key": storage.new_key()}
     return queue.enqueue(session, "import", payload, stages=stage_list("import"), target=("url", url))
 
@@ -371,7 +372,7 @@ def build_post_kit(clip: Clip, video: Video) -> str:
     permission = {"owned": "Your own content", "licensed": "Licensed (campaign or agreement)",
                   "permission": "Creator gave permission", "denied": "NOT PERMITTED",
                   "unknown": "Not recorded: check before posting"}.get(video.permission_status, video.permission_status)
-    credit = credit_line(video.attribution, video.creator_name)
+    credit = credit_line(video.attribution, video.creator_name, video.creator_handle)
     tags = " ".join(clip.hashtags or [])
     words = clip.cover_text or cover_words(clip.title)[0]
     thumbnail = (["THUMBNAIL", f"The .jpg next to this file, with the words “{words}” on it. Use it as the cover "
@@ -1044,13 +1045,14 @@ def _import(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             if project_id is not None and s.get(Project, project_id) is None:
                 project_id = None  # the project was deleted while the video was downloading
             creator = str(payload.get("creator_name") or found.creator or "")[:200]
+            handle = str(payload.get("creator_handle") or found.creator_handle or "")[:200]
             name = safe_filename(found.title, default="video", max_length=120) + path.suffix.lower()
             video, duplicate = register_video(
                 s, path, key=key, mode="managed", original_name=name, title=payload.get("title") or found.title,
                 info=info, thumb_folder=folder, source_type="url", source_url=found.url, creator_name=creator,
-                permission_status=str(payload.get("permission_status") or "unknown"),
+                creator_handle=handle, permission_status=str(payload.get("permission_status") or "unknown"),
                 permission_note=str(payload.get("permission_note") or ""),
-                attribution=f"Clip from {creator}" if creator else "", project_id=project_id)
+                attribution=credit_line("", creator, handle), project_id=project_id)
             video_id, title = video.id, video.title
             s.get(Job, ctx.job_id).video_id = video_id  # so the import shows in that video's work log
             notify(s, "import_done", f"Imported “{title}”",

@@ -238,3 +238,14 @@ def test_cancelling_while_waiting_to_try_again_stops_at_once(video_bytes: bytes,
 
     assert time.monotonic() - started < 10
 
+
+
+def test_the_creators_handle_is_kept_when_the_site_gives_one():
+    from app.services.downloader import _describe
+
+    found = _describe({"title": "Agent 327", "channel": "Blender", "uploader_id": "@blender", "id": "x",
+                       "webpage_url": "https://www.youtube.com/watch?v=x"}, "https://youtu.be/x")
+    assert found.creator_handle == "@blender"
+
+    found = _describe({"title": "A", "uploader": "Someone", "uploader_id": "UCabc123", "id": "y"}, "https://e.com/y")
+    assert found.creator_handle == ""   # a channel id is not a handle

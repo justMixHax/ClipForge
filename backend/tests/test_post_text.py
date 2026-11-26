@@ -26,3 +26,21 @@ def test_emojis_can_be_taken_out_of_a_caption_and_the_rest_stays():
     assert strip_emoji("Wait for it 😂🔥 he did it! 👀") == "Wait for it he did it!"
     assert strip_emoji("Thumbs 👍🏽 up ❤️ yes\nsecond line 🇺🇸 here") == "Thumbs up yes\nsecond line here"
     assert strip_emoji("Season 2, 100% real: $250") == "Season 2, 100% real: $250"
+
+
+def test_the_hashtags_are_specific_first_and_never_a_general_one_like_fyp():
+    # A general tag (#fyp, #viral) sends the clip to everyone; specific tags send it to people who would watch it.
+    from app.analysis.describe import build_hashtags
+
+    tags = build_hashtags("funny", "gaming", "gta", "Kai Cenat", "")
+
+    assert tags == ["#gta", "#kaicenat", "#funny", "#gaming", "#gamingclips"]
+    assert not any(t.lower() in ("#fyp", "#foryou", "#foryoupage", "#viral") for t in tags)
+
+
+def test_the_credit_names_the_creators_handle_when_it_is_known():
+    # Tagging the creator's own account reaches the people who follow them.
+    assert credit_line("", "Kai Cenat", "@KaiCenat") == "Clip from @KaiCenat"
+    assert credit_line("", "Kai Cenat", "KaiCenat") == "Clip from @KaiCenat"
+    assert credit_line("", "Kai Cenat", "") == "Clip from Kai Cenat"
+    assert credit_line("Thanks to Kai", "Kai Cenat", "@KaiCenat") == "Thanks to Kai"   # your wording still wins

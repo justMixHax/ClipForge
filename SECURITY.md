@@ -116,7 +116,8 @@ Built on 22 November 2026, to these rules:
   platform's own words.
 - **Safeguards**: only approved, rendered clips from a source whose right to post you recorded, checked again
   just before sending; the same clip goes to the same account once unless you ask; at most the daily limit in
-  Settings per account in 24 hours; a passing failure is tried again twice, then reported.
+  Settings per account in 24 hours, and no two posts on one account closer together than the gap in Settings
+  (3 hours by default); a passing failure is tried again twice, then reported.
 - **TikTok direct posting is not offered**: TikTok's rules for it exclude tools for posting to your own
   accounts. ClipForge sends drafts to your inbox instead.
 

@@ -130,7 +130,7 @@ def build_hashtags(category: str, preset: str, game_style: str, creator: str, te
     if category in CATEGORY_TAGS:
         tags.append(CATEGORY_TAGS[category])
     tags += PRESET_TAGS.get(preset, PRESET_TAGS["auto"])
-    tags.append("#fyp")
+    # Never a general tag (#fyp, #viral): it sends the clip to everyone, specific ones to people who would watch it.
     return list(dict.fromkeys(tags))[:6]
 
 
@@ -200,9 +200,13 @@ def tidy_caption(text: str, *, emojis: bool = True) -> str:
     return "\n".join(lines)
 
 
-def credit_line(attribution: str, creator: str) -> str:
-    """How the creator is credited when a clip is posted: your own wording when you gave one."""
-    return (attribution or "").strip() or (f"Clip from {creator}" if creator else "")
+def credit_line(attribution: str, creator: str, handle: str = "") -> str:
+    """How the creator is credited when a clip is posted: your own wording when you gave one, otherwise the
+    creator's @handle when it is known (tagging the account reaches the people who follow it), else their name."""
+    if (attribution or "").strip():
+        return attribution.strip()
+    handle = (handle or "").strip().lstrip("@")
+    return f"Clip from @{handle}" if handle else (f"Clip from {creator}" if creator else "")
 
 
 def post_caption(text: str, credit: str, hashtags: Sequence[str]) -> str:

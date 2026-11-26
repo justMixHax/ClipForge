@@ -22,7 +22,8 @@ WHAT = {
     "youtube": ("a YouTube Short", "title: up to 90 characters, no < or >. caption: one to three short sentences for "
                                    "the description, then the credit line."),
     "tiktok": ("a TikTok post", "title: a short headline, up to 90 characters. caption: one or two short sentences "
-                                "with the credit line."),
+                                "with the credit line; when the clip holds a claim or a choice people would disagree "
+                                "with, end with the question they would answer in the comments."),
     "instagram": ("an Instagram Reel", "title: a short headline, up to 90 characters. caption: one to three short "
                                        "sentences with the credit line."),
 }
@@ -121,7 +122,7 @@ def tiktok_caption(session: Session, clip_id: int, *, emojis: bool = True, hasht
     taken out whatever Claude writes."""
     clip, cfg = _clip_for_claude(session, clip_id)
     video = session.get(Video, clip.video_id)
-    credit = credit_line(video.attribution, video.creator_name) if video is not None else ""
+    credit = credit_line(video.attribution, video.creator_name, video.creator_handle) if video is not None else ""
     current = clip.tiktok_caption or post_caption(clip.description or clip.title, credit, clip.hashtags or [])
     answer = _ask(build_prompt(clip, video, "tiktok", emojis=emojis, avoid=current), cfg)
     words = answer["caption"] or answer["title"]
@@ -141,7 +142,7 @@ def youtube_text(session: Session, clip_id: int, *, emojis: bool = True, hashtag
     description in the box now, so a new one is different. Nothing is saved."""
     clip, cfg = _clip_for_claude(session, clip_id)
     video = session.get(Video, clip.video_id)
-    credit = credit_line(video.attribution, video.creator_name) if video is not None else ""
+    credit = credit_line(video.attribution, video.creator_name, video.creator_handle) if video is not None else ""
     answer = _ask(build_prompt(clip, video, "youtube", emojis=emojis, avoid=avoid, shape=YOUTUBE_SHAPE), cfg)
 
     def without_credit(text: str, joiner: str) -> str:  # the credit goes on a line of its own, wherever Claude put it

@@ -86,6 +86,36 @@ Built differently: OpenShorts picks its moments with Google's Gemini through an 
 Docker. ClipForge uses the Claude plan you already have, through the Claude Code tool, with its own rules as
 the fallback, and installs with one script and no extra services.
 
+## 5. "If Your TikToks Get Stuck Under 1,000 Views... Do This!" (Taro Creates, YouTube, 4 February 2025)
+
+An 11-minute video the project owner asked ClipForge to learn from, watched on 2026-11-25
+(youtube.com/watch?v=RZIkNL7qHLo). It is one creator's account of what gets short videos past a few hundred
+views, not platform documentation: nothing in it is verified by TikTok, and ClipForge states no claim of its
+own about how any platform ranks content. What it says, and what ClipForge does about it:
+
+| What the video says | What ClipForge does |
+|---|---|
+| Watch time and engagement decide how far a short video travels | The whole ranking aims at this: twelve sub-scores, led by the opening hook and the payoff |
+| The first 5 seconds are the hook, and above all a **visual** one that stops the scroll | The hook score counted words and loudness only. It now also counts whether the picture moves or cuts in the first 3 seconds, and marks down a still opening (`scoring.py`) |
+| No boring stretches; keep the clips changing | Pacing penalises dead air over 1.8 s; the editor cuts parts out of the middle |
+| Give people something to comment on, without faking it | Claude is now asked, where the clip holds a claim or a choice people would argue with, to end the caption with the question they would answer (`claude_review.py`, `assistant.py`) |
+| Hashtags must be specific; general ones like #fyp and #viral send the clip to everyone instead of the people who would watch it | `#fyp` is no longer added to any clip. The hashtags go specific first: game, creator, category, then the preset's (`describe.py`) |
+| Tag the account of the person in the clip | The credit line now uses the creator's `@handle` when the site gives one, which YouTube does (`describe.py`, `downloader.py`) |
+| Post from a phone, not a PC | ClipForge already sends TikTok posts to the app's drafts, which you finish on your phone |
+| Leave at least 3 hours between posts, so the platform can judge one before the next | New: two posts on one account are refused closer than the gap in Settings, 3 hours by default (`publishing/service.py`) |
+| Say what region and language you are posting for | Not built. ClipForge writes in the language of the clip and makes no claim about where a post is shown |
+
+Deliberately not taken from it:
+
+| What the video says | Why not |
+|---|---|
+| Strip a downloaded clip's metadata so the platform cannot tell it was reposted | Works around a platform's own detection. ClipForge records where a clip came from and whether you may post it, and keeps that record |
+| Use a proxy to post as if from another country | The same reason, and outside what a local clipping tool should do |
+| "Warm up" a new account by following and liking before posting | Advice about running an account, not about making clips |
+
+Its main point, that watch time and engagement are what matter, needs numbers ClipForge does not have yet:
+real figures from your connected accounts. That is Milestone 6 in the roadmap and is not started.
+
 ## Decisions for the first PC
 
 As decided on 2026-11-21:

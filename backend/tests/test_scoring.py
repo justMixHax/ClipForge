@@ -264,3 +264,23 @@ def test_starting_on_the_tail_of_the_previous_topic_is_penalised():
 def test_the_payoff_score_leaves_headroom_so_better_endings_can_still_win():
     ctx, sentences = context(STORY)
     assert ctx.score(0, len(sentences) - 1).subscores["payoff"] < 100
+
+
+def test_a_picture_that_moves_in_the_first_seconds_hooks_better_than_a_still_one():
+    # What stops the scroll is something happening on screen in the first seconds, not only the words.
+    words, sentences = transcript(STORY)
+    duration = words[-1].end + 2.0
+    opening = (words[0].start - 0.15, words[0].start + 3.0, 0.6)
+    moving = ScoringContext(words, sentences, make_audio(duration), make_visual(duration, busy=[opening]),
+                            ScoreOptions(preset="auto"))
+    still = ScoringContext(words, sentences, make_audio(duration), make_visual(duration, base=0.001),
+                           ScoreOptions(preset="auto"))
+
+    busy_hook = moving.score(0, len(sentences) - 1, explain=True)
+    still_hook = still.score(0, len(sentences) - 1, explain=True)
+
+    assert busy_hook.subscores["hook"] > still_hook.subscores["hook"]
+    assert any(e["dimension"] == "hook" and "picture" in e["text"].lower() and "first seconds" in e["text"].lower()
+               for e in busy_hook.evidence)
+    assert any(e["dimension"] == "hook" and "picture" in e["text"].lower() and e["impact"] < 0
+               for e in still_hook.evidence)

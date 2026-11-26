@@ -186,9 +186,12 @@ function DailyLimit() {
   const client = useQueryClient();
   const toast = useToast();
   const value = Number(settings.data?.values["publish.daily_limit"] ?? 6);
-  const save = async (next: number) => {
+  const gap = Number(settings.data?.values["publish.min_gap_hours"] ?? 3);
+  const save = async (next: number) => saveSetting("publish.daily_limit", Math.round(next));
+  const saveGap = async (next: number) => saveSetting("publish.min_gap_hours", Math.round(next * 2) / 2);
+  const saveSetting = async (key: string, next: number) => {
     try {
-      await api.put("/settings", { values: { "publish.daily_limit": Math.round(next) } });
+      await api.put("/settings", { values: { [key]: next } });
       client.invalidateQueries({ queryKey: ["settings"] });
       client.invalidateQueries({ queryKey: ["publishing"] });
     } catch (e) {
@@ -200,6 +203,7 @@ function DailyLimit() {
       <CardHeader title="Safeguards" hint="These apply to every account." />
       <ul className="space-y-2 px-5 pb-5 text-[13px] text-muted">
         <li className="flex flex-wrap items-center gap-2">At most <NumberField value={value} min={1} max={25} onCommit={save} className="w-16" /> posts per account in any 24 hours.</li>
+        <li className="flex flex-wrap items-center gap-2">At least <NumberField value={gap} min={0} max={48} step={0.5} onCommit={saveGap} className="w-16" /> hours between two posts on one account, so the platform sees how one does before the next (0 switches this off).</li>
         <li>Only clips you approved and rendered, from a source whose right to post you recorded (Source and rights).</li>
         <li>The same clip goes to the same account once, unless you tick “Post again anyway”.</li>
         <li>A post counts as published only when the platform confirms it. A passing problem is tried again twice, then reported.</li>

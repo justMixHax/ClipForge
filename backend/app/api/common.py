@@ -85,7 +85,8 @@ def clip_out(session: Session, clip: Clip, video: Video | None = None) -> ClipOu
     if video is not None:
         out.video_title, out.creator_name, out.permission_status = video.title, video.creator_name, video.permission_status
         out.post_caption = post_caption(clip.description or clip.title,
-                                        credit_line(video.attribution, video.creator_name), clip.hashtags or [])
+                                        credit_line(video.attribution, video.creator_name, video.creator_handle),
+                                        clip.hashtags or [])
     if clip.tiktok_caption:
         out.post_caption = clip.tiktok_caption
     # the clip as it was before the prompt edit stays here, for undo

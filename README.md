@@ -107,7 +107,9 @@ anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_W
 9. **Publish.** In the **Publishing Studio**, set up each platform once under **Accounts** (your own free
    developer app, then the platform's own sign-in; the page walks you through it). Then **New post**: pick
    approved clips, accounts, the text (Claude can suggest it) and now or a time. The **Calendar** shows what
-   goes out when. A post reads Published only once the platform has confirmed it.
+   goes out when. A post reads Published only once the platform has confirmed it. Two posts on one account are
+   kept at least 3 hours apart, so the platform can see how one does before the next (change or switch off that
+   gap under **Accounts**).
 10. **Follow the channels you clip from.** **Creator Discovery** uses YouTube's official API with a free key
     of your own (the page shows the four steps). Paste a channel's link or @handle and press **Follow**. For
     each of its new videos ClipForge shows what YouTube's public data says: how its views compare with the

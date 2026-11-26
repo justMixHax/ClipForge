@@ -111,7 +111,7 @@ need publishing or analytics show a dash.
 | Error handling | ✅ | Every failure path tested shows a message that says what to do |
 | Responsive interface | ✅ | Desktop and phone width |
 | Security review | ✅ | Self-reviewed and tested, see [SECURITY.md](SECURITY.md). Every change since 22 November 2026 was also reviewed by ChatGPT. Not reviewed by another person |
-| Testing | ✅ | 1,170 automated tests, run on one PC |
+| Testing | ✅ | 1,178 automated tests, run on one PC |
 | Windows installation scripts | ✅ | setup, start, stop, test, fonts, GPU libraries, sample builder, desktop shortcut |
 | Documentation | ✅ | |
 | Ready to be public | 🟡 | A contributing guide, third-party notices, a test that keeps folder paths from the author's PC and anything secret out of the repository, a test workflow that runs on GitHub, and the MIT licence. On GitHub as a private repository; see "Before the project is public" below |
@@ -153,6 +153,17 @@ need publishing or analytics show a dash.
   two missed moments, through your ChatGPT plan. On your stream it agreed with 4 of 6 and added 2.
 - **Work log**: after every job, short lines saying what Forge, Claude and ChatGPT each did.
 - **Code reviews by ChatGPT** before each commit (`scripts\review.ps1`).
+
+## Done on 25 November 2026
+
+- **Cancelling FFmpeg stops the real FFmpeg**, not only a launcher in front of it (Chocolatey installs one).
+  A cancel used to take about seven minutes on such an installation.
+- **Learned from a creator's video on short-video reach** (Taro Creates, in
+  [docs/RESEARCH.md](docs/RESEARCH.md) section 5): the hook score now counts whether the picture moves in the
+  first 3 seconds; `#fyp` is gone and hashtags go specific first; the credit names the creator's `@handle`;
+  Claude is asked for a caption people can answer when the clip gives them something to argue with; and two
+  posts on one account are kept at least 3 hours apart (a new setting). What that video says about hiding
+  reposts, proxies and warming up accounts was deliberately not taken.
 
 ## What needs you
 

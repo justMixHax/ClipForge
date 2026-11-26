@@ -721,7 +721,8 @@ def import_video(session: Session, video_id: int, *, permission_status: str | No
         creator.permission_status, creator.permission_note = status, note
         session.commit()
     job = pipeline.enqueue_import(session, url, permission_status=status, permission_note=note,
-                                  creator_name=creator.title, max_height=max_height, analyze=analyze)
+                                  creator_name=creator.title, creator_handle=creator.handle,
+                                  max_height=max_height, analyze=analyze)
     log.info("import queued from discovery", extra={"creator_id": creator.id, "job_id": job.id})
     return job
 

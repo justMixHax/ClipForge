@@ -267,4 +267,14 @@ def test_without_such_moments_the_request_does_not_mention_viewers():
     prompt = claude_review.build_prompt(SENTENCES, OPTIONS, title="Friday stream", creator="Kai", game="GTA",
                                         action_times=[], duration=END)
 
-    assert "Viewers" not in prompt and "comments" not in prompt
+    assert "Viewers" not in prompt and "wrote down" not in prompt
+    assert not [row for row in prompt.splitlines() if row.startswith("- ") and " comment" in row]
+
+
+def test_the_tiktok_caption_is_asked_to_leave_people_something_to_comment_on():
+    # Comments count as much as watch time; a caption that asks what people think, when the clip gives them
+    # something to disagree with, gets them without faking anything.
+    prompt = claude_review.build_prompt(SENTENCES, OPTIONS, title="Friday stream", creator="Kai", game="GTA",
+                                        action_times=[], duration=END)
+
+    assert "disagree" in prompt and "comment" in prompt

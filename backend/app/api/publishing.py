@@ -81,7 +81,8 @@ def overview(session: Session = Depends(get_db)) -> dict[str, Any]:
     return {"platforms": [{"platform": p, "label": store.LABELS[p], "connect": CONNECT[p],
                            "redirect_uri": service.redirect_uri(p) if CONNECT[p] == "sign_in" else "",
                            **store.app_summary(session, p)} for p in store.ADAPTERS],
-            "accounts": [account_out(a) for a in accounts], "daily_limit": service.daily_limit(session)}
+            "accounts": [account_out(a) for a in accounts], "daily_limit": service.daily_limit(session),
+            "min_gap_hours": service.min_gap_hours(session)}
 
 
 @router.put("/apps/{platform}")

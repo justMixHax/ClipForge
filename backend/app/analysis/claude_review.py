@@ -123,7 +123,8 @@ POST_TEXT = """For every clip you give, also write what goes with it when it is 
   really happens or is said (a short quote, a number, a reaction). Never promise more than the clip shows.
 - "thumb_word": the one word of "thumb" to show in colour, the one that makes people curious.
 - "caption": the TikTok caption: one short line (at most 150 characters) that makes people want to watch to the
-  end, without hashtags and without giving the payoff away.
+  end, without hashtags and without giving the payoff away. When the clip holds a claim or a choice people would
+  disagree with, end with the question they would answer in the comments.
 - "hashtags": 3 to 5 hashtags that fit this clip (what happens, the game, the topic), most specific first."""
 POST_FIELDS = ('"thumb": "2 TO 6 WORDS", "thumb_word": "WORDS", "caption": "one line for TikTok", '
                '"hashtags": ["#tag", "#tag"]')
