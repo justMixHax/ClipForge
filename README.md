@@ -21,26 +21,27 @@ and thumbnails are used on real streams. Publishing and Creator Discovery are bu
 stand-ins of the platforms' APIs; they need your own accounts and key before their first real request, and the
 app says so wherever that matters. The list under [What works](#what-works-and-what-does-not) is kept honest.
 
-## Quick start
+## Install: ask your AI
 
-You need 64-bit Windows 10 or 11, [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) (`winget install Gyan.FFmpeg`),
-Python 3.12 (or [uv](https://docs.astral.sh/uv/)) and Node.js. For Claude as the clip picker, install
-[Claude Code](https://claude.com/claude-code) and sign in once (`claude auth login` in a terminal); ClipForge
-finds it by itself ([SETUP_WINDOWS.md](SETUP_WINDOWS.md), step 8). Then, from the project folder:
+ClipForge is installed by your own AI. Open **Claude Code**, or **Codex** in the ChatGPT desktop app, and send it:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```text
+Set up ClipForge for me: https://github.com/justMixHax/ClipForge
 ```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start.ps1
-```
+It checks your PC, asks before it installs anything or downloads the speech model, sets ClipForge up, starts it,
+and puts a **ClipForge** shortcut on your desktop. Then it tells you where to begin.
 
-The second command opens `http://localhost:3000`. To start it without typing that again, run
-`scripts\shortcut.ps1` once: it puts a **ClipForge** shortcut on your desktop (double-click it to start ClipForge;
-if it is already running, it just opens it). To stop, press **Shut down ClipForge** at the bottom of the app's
-menu (a job that is running continues next time), Ctrl+C in the start window, or `scripts\stop.ps1` from
-anywhere. Details, options and troubleshooting are in [SETUP_WINDOWS.md](SETUP_WINDOWS.md).
+You need 64-bit Windows 10 or 11 and about 3 GB of free disk space. A chat window in the browser cannot do this,
+because it cannot run anything on your PC: it has to be Claude Code or Codex.
+
+Your AI follows [AGENTS.md](AGENTS.md), which lists every step it takes and every download, so you can read
+exactly what it will do first. [SETUP_WINDOWS.md](SETUP_WINDOWS.md) is the full manual behind it, with options
+and troubleshooting.
+
+After that: double-click **ClipForge** on your desktop to start it (if it is already running, the shortcut just
+opens it). To stop it, press **Shut down ClipForge** at the bottom of the app's menu; a job that is running
+continues next time.
 
 ## Using it
 

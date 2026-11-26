@@ -1,5 +1,7 @@
 # Setting up ClipForge on Windows
 
+The easy way is to ask your AI: send Claude Code, or Codex in the ChatGPT desktop app, "Set up ClipForge for me: https://github.com/justMixHax/ClipForge". It follows [AGENTS.md](AGENTS.md), which does what this page describes. This page is the full manual behind it.
+
 Every command below is run in PowerShell from the project folder. The scripts work with the Windows
 PowerShell 5.1 that ships with Windows; nothing is changed system-wide (`-ExecutionPolicy Bypass` applies to
 that one command only).
