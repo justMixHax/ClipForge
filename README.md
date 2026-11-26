@@ -7,6 +7,7 @@
   <img alt="Open source, MIT licence" src="https://img.shields.io/badge/licence-MIT-ff7a3d">
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/runs%20on-Windows%2010%20%7C%2011-2b3240">
   <img alt="Install by asking your AI" src="https://img.shields.io/badge/install-ask%20your%20AI-2b3240">
+  <img alt="First release, v0.1.0, early" src="https://img.shields.io/badge/release-v0.1.0%20%C2%B7%20early-2b3240">
 </p>
 
 # ClipForge AI
@@ -27,6 +28,11 @@ and a thumbnail, ready to post. Everything runs on your own Windows PC, in your 
   the YouTube channels you clip from.
 - **Your videos stay on your PC.** When Claude picks, it gets the transcript, not the video. No telemetry, no
   update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network, and when.
+
+> [!NOTE]
+> **This is the first release, and ClipForge is not finished yet.** It works and it is used on real streams, but it
+> is early: it has been tested on one PC, and some parts are still being built. New improvements are coming.
+> [ROADMAP.md](ROADMAP.md) shows what is next. Watch or star the repository to hear about each new release.
 
 **Status.** Built and tested by one person on one PC, with more than 1,100 automated tests. Clipping, editing
 and thumbnails are used on real streams. Publishing and Creator Discovery are built and tested against local
