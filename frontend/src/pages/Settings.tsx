@@ -236,6 +236,11 @@ export default function SettingsPage() {
                   <option value="sonnet">Sonnet</option><option value="opus">Opus</option><option value="haiku">Haiku</option>
                 </Select>
               </Field>
+              <Field label="Claude's second look" hint="Claude goes through its own picks again as a sceptical editor and drops what does not hold up as the kind of moment you asked for. It is a second, smaller request on your Claude plan.">
+                <Select value={v("ai.engine") === "claude" && v("ai.check") ? "on" : "off"} disabled={v("ai.engine") !== "claude"} onChange={(event) => save({ "ai.check": event.target.value === "on" })}>
+                  <option value="on">On (recommended)</option><option value="off">Off</option>
+                </Select>
+              </Field>
               <Field label="Second opinion" hint="ChatGPT checks the picks through the Codex tool from the ChatGPT app and your ChatGPT plan, and may add up to two missed moments. Nothing is removed: you decide.">
                 <Select value={v("ai.engine") === "claude" ? String(v("ai.second_opinion")) : "off"} disabled={v("ai.engine") !== "claude"} onChange={(event) => save({ "ai.second_opinion": event.target.value })}>
                   <option value="chatgpt">ChatGPT (recommended)</option><option value="off">Off</option>

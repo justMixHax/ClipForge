@@ -196,4 +196,5 @@ def _claude_off_unless_a_test_turns_it_on(monkeypatch):  # noqa: ANN001
     monkeypatch.setitem(settings_store.SCHEMA, "ai.engine", ("local", settings_store.SCHEMA["ai.engine"][1]))
     monkeypatch.setitem(settings_store.SCHEMA, "ai.second_opinion",
                         ("off", settings_store.SCHEMA["ai.second_opinion"][1]))
+    monkeypatch.setitem(settings_store.SCHEMA, "ai.check", (False, settings_store.SCHEMA["ai.check"][1]))
 

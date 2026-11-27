@@ -96,6 +96,26 @@ its draft; a block that does not read as written is tried once more with clock t
 are read as seconds or as a clock. Both were seen for real: on two long streams Claude wrote a draft, then
 "Correction, here is the real answer", or times as a clock, and its picks were lost to the local rules.
 
+**The kind of moment asked for** (`analysis/focus.py`): ten kinds (best moments, funny, gameplay showcase, hype,
+horror, rage, streamer moments, wholesome, educational, stories and hot takes). Each says, in words Claude is
+given as they stand, what counts as one, what has to be inside the clip for it to hold up, what looks like one
+but is not, and how such a clip should open; and whether words or the picture mostly carry it. Asked for a
+kind, Claude gives only moments of that kind, fewer or none when the video has none (an empty answer is then an
+answer, `NoPicks`, not a failure), each with the line or event that makes it one. The local rules only know
+which of their categories belong to a kind, so they lift those by 8 points, lower the others by 12, and for a
+kind the picture carries look at the loud, busy moments first.
+
+**Claude's second look** (`analysis/check.py`, on by default): with it on, the first pass gives a shortlist
+(half as many again as clips are wanted) and each candidate is gone through again as a sceptical editor would:
+keep or drop, how clearly it is the kind asked for, one reason, the line it should open on, and a better line
+for the screen. A start is only ever moved onto the start of a line (later, within the clip's opening third; or
+a little earlier, to take in a missing setup). A kept clip's score is the mean of both passes. With "look at the
+picture" on, one sheet of eight small frames per candidate goes with the request (three from its opening
+seconds), with no tool switched on; and for a kind the picture carries, the loud, busy moments the local rules
+found join the candidates, since there is little for Claude to read there. Such a moment becomes a clip only if
+Claude saw it and kept it, with Claude's title. A second look that cannot be taken leaves the picks as they
+were, and the job says so.
+
 **ChatGPT's second opinion** (`analysis/chatgpt_review.py`): ChatGPT then gets the same transcript and the
 numbered picks, and answers "agree" or "disagree" with a reason for each, plus at most two missed moments.
 Nothing is removed: a disputed clip stays, marked "ChatGPT disagrees". It runs `codex exec` read-only, with

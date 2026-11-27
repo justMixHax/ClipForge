@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 
 from tests.test_api import client  # noqa: F401  (the shared app fixture)
 
-MINE = {"content_preset": "gaming", "game_style": "gta", "count": 4, "length": "15-60", "min_score": 60,
-        "aspect": "9:16", "layout": "facecam_top", "captions": "gaming", "quality": "speed", "auto_render": True,
-        "remove_silence": True, "show_hook": False}
+MINE = {"content_preset": "gaming", "game_style": "gta", "focus": "gameplay", "look": True, "count": 4,
+        "length": "15-60", "min_score": 60, "aspect": "9:16", "layout": "facecam_top", "captions": "gaming",
+        "quality": "speed", "auto_render": True, "remove_silence": True, "show_hook": False}
 
 
 def save(client: TestClient, name: str, config: dict | None = None):  # noqa: F811, ANN201

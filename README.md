@@ -21,13 +21,18 @@ and a thumbnail, ready to post. Everything runs on your own Windows PC, in your 
   the moments, writes the titles and post text, and makes edits you describe in plain words ("bigger yellow
   subtitles, cut the part where he reads chat"), all on the Claude plan you already have, with no API key and no
   extra bill. ChatGPT can give a second opinion the same way. Without either, ClipForge's own rules pick.
+- **You say what you are looking for.** Funny moments, gameplay showcase, hype, horror, rage, streamer moments,
+  wholesome, educational, or stories and hot takes: Claude is held to that kind, opens every clip on its
+  strongest second, then takes a second look at each pick and drops what does not hold up. Let it look at the
+  picture too and it judges frames of each pick as well, which is how a scare or a clean run with no talk gets
+  found.
 - **Ready to post.** 9:16, 1:1, 4:5 or 16:9; captions word by word in six styles or your own; a hook title; a
   thumbnail with big words; a TikTok caption and hashtags.
 - **Built for clippers.** Facecam and gameplay layouts, game vocabularies (GTA, DayZ, EA Sports FC, Roblox), clips
   from your own timestamps, a score for every clip with the reasons behind it, and Creator Discovery to follow
   the YouTube channels you clip from.
-- **Your videos stay on your PC.** When Claude picks, it gets the transcript, not the video. No telemetry, no
-  update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network, and when.
+- **Your videos stay on your PC.** When Claude picks, it gets the transcript, not the video; a few small still
+  frames of its picks go with it only if you switch that on. No telemetry, no update check. [SECURITY.md](SECURITY.md) lists everything that goes over the network, and when.
 
 > [!NOTE]
 > **This is the first release, and ClipForge is not finished yet.** It works and it is used on real streams, but it
@@ -142,7 +147,13 @@ nothing is said in them.</sub>
 
    Record who made it and whether you are allowed to clip it, and put it in a project if you want to group
    your work.
-2. **2 · How to clip it.** Pick a preset (Fast Gaming Clips, Funny Streamer Moments, Podcast Highlights, ...)
+2. **2 · How to clip it.** Choose **what you are looking for** first: Best moments, Funny moments, Gameplay
+   showcase, Hype / clutch, Horror / scares, Rage moments, Streamer moments, Wholesome / cosy, Educational, or
+   Stories & hot takes (the same choice is offered with a link you paste). With a kind chosen, Claude gives only
+   moments of that kind, fewer or none when the video does not have them, and never pads with other kinds.
+   **Let Claude look at the picture too** sends eight small frames of each pick with its second look; for
+   gameplay, hype and scares that is what lets a moment with little talk be found. Then pick a preset (Fast
+   Gaming Clips, Funny Streamer Moments, Podcast Highlights, ...)
    or set the kind of content, game, number of clips, clip length, minimum score, shape, layout and caption
    style yourself. **Save these settings as a preset** keeps them under a name of your own, next to the built-in
    ones (the × on it removes it). Press **Generate Clips**.
@@ -218,7 +229,7 @@ own PC, is in the app under **Settings → What works, and what does not yet**.
 
 | | |
 |---|---|
-| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor, with parts left out of the middle · **your own presets** · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
+| **Working and tested** | Upload and link-from-disk · import from a link (public videos) · projects · **clips from your own timestamps** · **Claude picks the clips** (through the Claude Code tool and your own Claude plan, no API key; local rules as fallback) · **ChatGPT checks the picks** and may add missed ones (through the Codex tool and your own ChatGPT plan) · **a kind of moment to look for** (ten kinds, from funny to horror to educational), with **Claude's second look** at every pick, with frames of the video when you switch that on · a **work log** after every job saying what Forge, Claude and ChatGPT each did · local speech-to-text with word timings · highlight discovery with 12-part explainable scoring, plus loud and busy moments from stretches where almost nothing is said · content presets and game vocabularies (GTA, DayZ, EA Sports FC, Roblox) · review, ranking, feedback · clip editor, with parts left out of the middle · **your own presets** · **prompt edit** (describe a change; Claude makes it, the clip is rendered again, one press undoes it) · **a thumbnail for every clip** (best moment, big words, a TikTok caption and hashtags) · renders in 9:16, 1:1, 4:5 and 16:9 with four layouts · six caption styles plus your own, SRT and VTT · volume levelling, noise reduction, pause tightening · export quality checks · search inside transcripts · duplicate detection · A/B variants · export with post text · job queue with cancel, retry and resume · hardware detection · GPU video encoding (NVENC) · speech-to-text on the graphics card (about 4× faster than the processor here) |
 | **Working, with a caveat** | Face-aware reframing and facecam detection: checked on real streams on 23 November 2026 (GTA RP, Rainbow Six, a desk stream). The camera panel was right every time; the gameplay panel showed the stream's own facecam a second time, which is fixed. The crop stays fixed for the whole clip unless you switch on **Follow the person** (editor → Layout, cropped layout, or ask in a prompt edit): then the camera pans sideways with them, like a heavy tripod. That is new on 24 November 2026: the moving crop is tested with real renders, but it has not yet been watched on a clip where someone really walks. |
 | **Needs setup** | Speech-to-text on the graphics card: on a PC with an NVIDIA card, run `scripts\enable-gpu.ps1` once (about 1.3 GB); until then it runs on the processor. Claude and ChatGPT: the Claude Code tool and the ChatGPT app's Codex tool, each signed in; without them the local rules pick the clips. |
 | **Waiting for your accounts** | **Publishing**: YouTube Shorts (upload and schedule), TikTok (to your drafts), Instagram Reels, with a queue, calendar, safeguards and Claude's post text. Built and tested against stand-ins of each platform's API made from its documentation; each needs your own developer app and sign-in before the first real post (Publishing Studio → Accounts). **Creator Discovery**: follow YouTube channels, see their new videos with what the public numbers and top comments say, import the ones you may clip. Built and tested against a stand-in of the YouTube Data API made from its documentation and from the real API's own refusals; it needs your own free API key before its first real request. |
@@ -249,6 +260,15 @@ not measured: 80% for Claude's picks, 70% for the ones ChatGPT adds, at most 74%
 tuned on a synthetic test video and unit tests, not on a large set of real streams) and at most 45% for moments
 found from sound and picture alone. Expect to disagree sometimes; that is what the feedback buttons and manual
 ranking are for.
+
+When you ask for a kind of moment, Claude also says how clearly each pick is that kind and quotes the line, or
+names the event, that makes it one. Its second look then goes through every pick again as a sceptical editor:
+what does not hold up is dropped, with the reason in the work log, and a kept clip's score is the mean of its
+first score and the second look's. A clip the second look kept says so, with its reason. For a kind the picture
+carries (gameplay, hype, scares), with the picture switched on, the loud and busy moments the local rules found
+are put to that second look as well, and Claude names the ones it keeps from what it sees. The local rules on
+their own can only approximate a kind: they lift moments from their own matching categories by 8 points, lower
+the others by 12, and say so on each clip.
 
 ## Where things are
 

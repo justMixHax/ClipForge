@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from .. import db
 from ..analysis.audio import AudioFeatures, compute_audio_features
 from ..analysis.dedupe import ExistingClip
-from ..analysis import chatgpt_review, claude_review
+from ..analysis import chatgpt_review, check, claude_review, focus
 from ..analysis.describe import cover_words, credit_line, post_caption
 from ..analysis.engine import (HighlightOptions, apply_second_opinion, find_highlights, highlights_from_picks,
                                moment_highlight)
@@ -177,6 +177,8 @@ class AnalyzeOptions:
     min_score: float = 0.0
     content_preset: str = "auto"
     game_style: str = ""
+    focus: str = focus.DEFAULT        # the kind of moment to look for
+    look: bool = False                # Claude's second look also gets frames of each pick
     aspect: str = "9:16"
     layout: str = "auto"
     captions: str = "opus"
@@ -200,6 +202,9 @@ class AnalyzeOptions:
         if raw.get("content_preset") in CONTENT_PRESETS:
             opts.content_preset = raw["content_preset"]
         opts.game_style = str(raw.get("game_style", ""))[:20]
+        if raw.get("focus") in focus.FOCUSES:
+            opts.focus = raw["focus"]
+        opts.look = bool(raw.get("look", False))
         if raw.get("aspect") in ASPECTS:
             opts.aspect = raw["aspect"]
         if raw.get("layout") in LAYOUTS:
@@ -526,11 +531,14 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     highlights = find_highlights(
         words, sentences, audio, visual,
         HighlightOptions(count=opts.count, min_len=opts.min_len, max_len=opts.max_len, min_score=opts.min_score,
-                         preset=opts.content_preset, game_style=opts.game_style,
+                         preset=opts.content_preset, game_style=opts.game_style, focus=opts.focus,
                          niche_keywords=tuple(cfg["niche.keywords"]), language=language or "en"),
         duration=video.duration, existing=existing, feedback=feedback, video_title=video.title,
         creator=video.creator_name, should_cancel=ctx.cancelled, on_progress=ctx.progress)
     timing["highlights"] = round(time.monotonic() - started, 1)
+    kind = focus.get(opts.focus)
+    of_a_kind = kind.key != focus.DEFAULT
+    none_of_the_kind = False          # Claude looked for the kind asked for and nothing held up
 
     # Moments viewers wrote down in the comments, when this video was found through Creator Discovery. They are
     # a hint and nothing more: when they cannot be read, the clips are found without them.
@@ -552,6 +560,9 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     if cfg["ai.engine"] == "claude" and sentences:
         ctx.say("forge", f"Measured sound and picture and made {len(highlights)} backup picks with its own rules.")
     elif highlights:
+        if of_a_kind:
+            ctx.say("forge", f"Looked for “{kind.label}” with its own rules, which can only approximate a kind "
+                             "of moment: Claude judges it properly.")
         ctx.say("forge", f"Picked {count(len(highlights), 'clip')} with its own rules: {titles(highlights)}.")
 
     # ---- Claude picks the clips (the local picks above are the fallback) ----------------------------
@@ -564,26 +575,107 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         started = time.monotonic()
         hl_options = HighlightOptions(count=opts.count, min_len=opts.min_len, max_len=opts.max_len,
                                       min_score=opts.min_score, preset=opts.content_preset,
-                                      game_style=opts.game_style, niche_keywords=tuple(cfg["niche.keywords"]),
-                                      language=language or "en")
+                                      game_style=opts.game_style, focus=opts.focus,
+                                      niche_keywords=tuple(cfg["niche.keywords"]), language=language or "en")
         action_times = sorted({round(h.peak_time, 1) for h in highlights if h.analysis_source == "signals-only"}
                               | {round(float(e["start"]), 1) for e in (audio.loud_events if audio else [])})
+        # With a second look coming, Claude gives more candidates than clips are wanted, so that what the second
+        # look drops does not leave places empty.
+        shortlist = min(30, opts.count + max(2, opts.count // 2)) if cfg["ai.check"] else None
         prompt = claude_review.build_prompt(sentences, hl_options, title=video.title, creator=video.creator_name,
                                             game=opts.game_style, action_times=action_times,
-                                            duration=video.duration, viewer_moments=pointed)
+                                            duration=video.duration, viewer_moments=pointed, shortlist=shortlist,
+                                            frames=bool(shortlist and opts.look))
+        if kind.led_by == "picture" and not opts.look:
+            ctx.say("forge", f"“{kind.label}” is carried by the picture. With “Let Claude look at the picture too” "
+                             "switched on, loud and busy moments are judged by their frames as well.")
+
+        def nothing_held_up() -> None:
+            nonlocal highlights, none_of_the_kind
+            highlights, none_of_the_kind = [], True
+            ctx.note(f"Nothing held up as “{kind.label}”")
+            ctx.say("claude", f"Found nothing that holds up as “{kind.label}”.")
         if pointed:
             ctx.say("forge", "Told Claude where viewers' comments point: "
                              + ", ".join(claude_review.clock(m["t"]) for m in pointed[:6])
                              + (f" and {len(pointed) - 6} more" if len(pointed) > 6 else "") + ".")
         try:
-            picks = claude_review.ask_claude(prompt, model=str(cfg["ai.claude_model"]), should_cancel=ctx.cancelled)
+            try:
+                picks = claude_review.ask_claude(prompt, model=str(cfg["ai.claude_model"]),
+                                                 should_cancel=ctx.cancelled)
+            except claude_review.NoPicks:
+                if not of_a_kind:
+                    raise
+                picks = []   # an answer in its own right: what is said holds none of the kind asked for
+            looked_again, shortlisted = "", False
+            if shortlist:
+                candidates = sorted((p for p in picks if p.score >= opts.min_score), key=lambda p: -p.score)[:shortlist]
+                if candidates:
+                    ctx.say("claude", f"Shortlisted {count(len(candidates), 'moment')}: {titles(candidates)}.")
+                    shortlisted = True
+                frames: list[bytes] = []
+                if opts.look:
+                    if kind.led_by == "picture":
+                        # Where little is said there is little for Claude to read, so the loud, busy moments the
+                        # local rules found go to the second look as well, to be judged by their frames.
+                        unread = check.from_signals(highlights, candidates, kind,
+                                                    room=max(2, shortlist - len(candidates)))
+                        if unread:
+                            ctx.say("forge", f"Added {count(len(unread), 'loud, busy moment')} for Claude to look "
+                                             "at: " + ", ".join(claude_review.clock(p.start) for p in unread) + ".")
+                            candidates = [*candidates, *unread]
+                    try:
+                        frames = check.sheets(source, candidates) if candidates else []
+                    except Exception:  # noqa: BLE001  (no frames: the second look reads the words only)
+                        log.warning("frames for Claude's second look could not be made", exc_info=True)
+                    if not frames:   # nobody can see them, so they cannot be judged
+                        candidates = [p for p in candidates if p.local is None]
+                if candidates:
+                    try:
+                        verdicts = check.ask(
+                            check.build_prompt(sentences, candidates, hl_options, title=video.title,
+                                               creator=video.creator_name, game=opts.game_style,
+                                               loud_times=action_times, pictures=bool(frames)),
+                            len(candidates), model=str(cfg["ai.claude_model"]), pictures=frames,
+                            should_cancel=ctx.cancelled)
+                        picks, dropped = check.apply(candidates, verdicts, sentences, hl_options, looked=bool(frames))
+                        line = (f"Looked again at {count(len(candidates), 'pick')}"
+                                f"{', with frames of the video' if frames else ''}: kept {len(picks)}, "
+                                f"dropped {len(dropped)}")
+                        if dropped:   # why each went, so the user can disagree
+                            shown = "; ".join(
+                                (f"“{p.title}”" if p.title else f"the moment at {claude_review.clock(p.start)}")
+                                + f": {why.rstrip('. ')}" for p, why in dropped[:3])
+                            line += f" ({shown}{f'; and {len(dropped) - 3} more' if len(dropped) > 3 else ''})"
+                        ctx.say("claude", line + ".")
+                        looked_again = f"; second look kept {len(picks)} of {len(candidates)}"
+                    except claude_review.ClaudeUnavailable as exc:
+                        why = exc.message.split(",")[0].rstrip(".")
+                        log.warning("Claude's second look unavailable: %s", exc.message)
+                        ctx.say("claude", f"Could not take a second look: {why}. The picks stand unchecked.")
+                        note = (note + " " if note else "") + (f"The second look was not taken: {why}."
+                                                               + (" " + exc.hint if exc.hint else ""))
+                        picks = [p for p in candidates if p.local is None]
+                    except JobCancelled:
+                        raise
+                    except Exception:  # noqa: BLE001  (an optional second look must never cost the user the picks)
+                        log.warning("Claude's second look failed", exc_info=True)
+                        ctx.say("claude", "Could not take a second look: something unexpected went wrong. The picks "
+                                          "stand unchecked.")
+                        picks = [p for p in candidates if p.local is None]
             chosen = highlights_from_picks(words, sentences, audio, visual, hl_options, picks,
                                            duration=video.duration, existing=existing, feedback=feedback,
                                            video_title=video.title, creator=video.creator_name)
             if chosen:
                 highlights = chosen
-                ctx.note(f"Claude ({cfg['ai.claude_model']}) picked {len(chosen)}")
-                ctx.say("claude", f"Picked {count(len(chosen), 'clip')}: {titles(chosen)}.")
+                ctx.note(f"Claude ({cfg['ai.claude_model']}) picked {len(chosen)}{looked_again}")
+                if not shortlisted and not looked_again:
+                    ctx.say("claude", f"Picked {count(len(chosen), 'clip')}: {titles(chosen)}.")
+                elif len(chosen) != len(picks) or any(p.local is not None for p in picks):
+                    # fewer clips than moments that held up, or one that only now got its title: say which
+                    ctx.say("claude", f"Made {count(len(chosen), 'clip')} of them: {titles(chosen)}.")
+            elif of_a_kind:
+                nothing_held_up()
             else:
                 ctx.note("Claude found nothing above your minimum score; showing the local picks")
                 ctx.say("claude", "Found nothing above your minimum score, so Forge's own picks were kept.")
@@ -606,8 +698,8 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         started = time.monotonic()
         second_options = HighlightOptions(count=opts.count, min_len=opts.min_len, max_len=opts.max_len,
                                           min_score=opts.min_score, preset=opts.content_preset,
-                                          game_style=opts.game_style, niche_keywords=tuple(cfg["niche.keywords"]),
-                                          language=language or "en")
+                                          game_style=opts.game_style, focus=opts.focus,
+                                          niche_keywords=tuple(cfg["niche.keywords"]), language=language or "en")
         prompt = chatgpt_review.build_prompt(sentences, highlights, second_options, title=video.title,
                                              creator=video.creator_name)
         try:
@@ -679,18 +771,27 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
             "loud_events": len(audio.loud_events) if audio else 0, "scene_cuts": len(visual.cuts),
             "suggestions": len(highlights), "note": note,
             "options": {"count": opts.count, "min_len": opts.min_len, "max_len": opts.max_len,
-                        "min_score": opts.min_score, "content_preset": opts.content_preset}}
+                        "min_score": opts.min_score, "content_preset": opts.content_preset, "focus": opts.focus,
+                        "look": opts.look}}
         if highlights:
             body = "Rendering has started." if opts.auto_render else "Open the AI Clipper to review them."
             notify(s, "clips_ready", f"{len(highlights)} moments found in “{video.title}”", body, f"/clipper?video={video.id}")
+        elif none_of_the_kind:
+            notify(s, "info", f"Nothing held up as “{kind.label}” in “{video.title}”",
+                   "Try “Best moments” or another kind and analyse again.", f"/clipper?video={video.id}")
         else:
             notify(s, "info", f"No moments above your minimum score in “{video.title}”",
                    "Lower the minimum score or widen the clip length and analyse again.", f"/clipper?video={video.id}")
+    if none_of_the_kind:
+        note = (f"Claude found nothing in this video that holds up as “{kind.label}”. Try “Best moments” or "
+                "another kind." + (" " + note if note else ""))
     if not highlights and not note:
         note = "No moment scored above the minimum. Try a lower minimum score or a wider length range."
     if highlights:
         ctx.say("forge", f"Saved {len(highlights)} clip{'s' if len(highlights) != 1 else ''}"
                          + (" and started rendering them." if opts.auto_render else " for you to review."))
+    elif none_of_the_kind:
+        ctx.say("forge", f"Saved no clips: nothing held up as “{kind.label}”.")
     else:
         ctx.say("forge", "Saved no clips: nothing scored above your minimum.")
     return {"clips": len(highlights), "words": len(words), "note": note, "timing": timing}

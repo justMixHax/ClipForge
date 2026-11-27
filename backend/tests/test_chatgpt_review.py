@@ -342,3 +342,16 @@ def test_a_reached_limit_says_when_chatgpt_works_again():
 
     assert "limit is reached" in error.message
     assert "Nov 30th, 2026 9:02 PM" in error.hint
+
+
+# ------------------------------------------------------------------------- the kind of moment asked for
+def test_the_second_opinion_is_told_the_kind_of_moment_asked_for():
+    from app.analysis import focus
+
+    horror = HighlightOptions(count=3, min_len=8, max_len=40, focus="horror")
+    prompt = chatgpt_review.build_prompt(SENTENCES, claude_picks(), horror, title="Friday stream", creator="Kai")
+    plain = chatgpt_review.build_prompt(SENTENCES, claude_picks(), OPTIONS, title="Friday stream", creator="Kai")
+
+    assert "Horror / scares" in prompt and focus.get("horror").looking_for in prompt
+    assert "only add moments of that kind" in prompt
+    assert "one kind of moment" not in plain

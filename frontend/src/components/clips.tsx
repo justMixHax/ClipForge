@@ -204,6 +204,7 @@ export function ClipCard({
                 {clip.analysis_source === "claude" && <Badge tone="info" title="Claude chose this moment; the reason is below">Picked by Claude</Badge>}
                 {clip.analysis_source === "chatgpt" && <Badge tone="good" title="ChatGPT found this moment; the reason is below">Added by ChatGPT</Badge>}
                 {(() => { const v = clip.evidence.find((e) => e.dimension === "chatgpt")?.verdict; return v === "agree" ? <Badge tone="good" title="ChatGPT checked this pick and agrees">Checked by ChatGPT</Badge> : v === "disagree" ? <Badge tone="warn" title="ChatGPT thinks this would not work as a short; its reason is below">ChatGPT disagrees</Badge> : null; })()}
+                {clip.evidence.some((e) => e.dimension === "check") && <Badge tone="good" title="Claude went through this pick again and kept it; its reason is below">Second look passed</Badge>}
                 {clip.origin === "variant" && <Badge tone="info">{clip.variant_label || "Variant"}</Badge>}
                 {clip.manual_rank !== null && <Badge title="You placed this clip yourself">Your order</Badge>}
                 <ReviewBadge status={clip.review_status} />
@@ -368,6 +369,7 @@ export function ClipViewer({ clip: given, options, onClose, onPeek }: { clip: Cl
                 {clip.analysis_source === "claude" && <Badge tone="info">Picked by Claude</Badge>}
                 {clip.analysis_source === "chatgpt" && <Badge tone="good" title="ChatGPT found this moment; the reason is below">Added by ChatGPT</Badge>}
                 {(() => { const v = clip.evidence.find((e) => e.dimension === "chatgpt")?.verdict; return v === "agree" ? <Badge tone="good" title="ChatGPT checked this pick and agrees">Checked by ChatGPT</Badge> : v === "disagree" ? <Badge tone="warn" title="ChatGPT thinks this would not work as a short; its reason is below">ChatGPT disagrees</Badge> : null; })()}
+                {clip.evidence.some((e) => e.dimension === "check") && <Badge tone="good" title="Claude went through this pick again and kept it; its reason is below">Second look passed</Badge>}
                 <ReviewBadge status={clip.review_status} />
                 <QcBadge clip={clip} />
                 {clip.permission_status && <RightsBadge status={clip.permission_status} />}

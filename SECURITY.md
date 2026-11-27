@@ -62,7 +62,7 @@ Nothing, unless you start it:
 | `scripts\get-fonts.ps1` | Four open-licence font families | GitHub |
 | `scripts\enable-gpu.ps1` | NVIDIA runtime libraries | PyPI |
 | Checking or importing a link | The video's details, then the video itself | The site in the link you pasted, and the addresses that site serves its video from |
-| Analysing a video with Claude as the engine (the default) | The video's transcript, title and creator name, never the video itself. For a video found through Creator Discovery, also the short lines from its public comments that name a moment | Anthropic, through the Claude Code tool on this PC and your own Claude sign-in |
+| Analysing a video with Claude as the engine (the default) | The video's transcript, title and creator name, never the video itself. For a video found through Creator Discovery, also the short lines from its public comments that name a moment. Claude's second look (on by default) sends its picks again, with the lines in and just before each. Only with **Let Claude look at the picture too** switched on (it is off until you switch it on): one sheet of eight small still frames of each shortlisted moment | Anthropic, through the Claude Code tool on this PC and your own Claude sign-in |
 | A prompt edit | What you wrote, the clip's settings and words, the names of the fonts on this PC, and two still pictures taken from the clip | Anthropic, the same way |
 | Post text, a TikTok caption or a YouTube title and description, when you press the button for one | What is said in the clip, its title and the creator's name | Anthropic, the same way |
 | ChatGPT's second opinion (on by default, skipped with "Local rules only") | The transcript, title, creator name and the picks | OpenAI, through the Codex tool from the ChatGPT app, only when it is signed in with ChatGPT (never an API key) |
@@ -74,8 +74,9 @@ Nothing, unless you start it:
 | `scripts\update-downloader.ps1` | The newest yt-dlp release | PyPI |
 
 There is no telemetry, no update check and no analytics. Your source videos are never uploaded anywhere. A
-clip leaves this PC only when you publish it to an account you connected, and pictures from a clip go to
-Claude only with a prompt edit. Transcripts are sent only to Claude when it picks the clips and to ChatGPT when
+clip leaves this PC only when you publish it to an account you connected, and pictures from a video go to
+Claude only with a prompt edit, or with its second look when you have switched **Let Claude look at the picture
+too** on. Transcripts are sent only to Claude when it picks the clips and to ChatGPT when
 it checks them; set Settings → Who picks the clips to "Local rules only" and nothing is sent to either.
 
 No paid API is ever called. Claude and ChatGPT are reached through the tools of your own plans, never with an

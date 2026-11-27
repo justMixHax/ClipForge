@@ -529,3 +529,35 @@ def test_a_part_saved_before_this_check_does_not_block_other_changes(client: Tes
     changed = client.patch(f"/api/clips/{clip['id']}", json={"settings": {"zoom": 1.5}})
 
     assert changed.status_code == 200 and changed.json()["settings"]["zoom"] == 1.5
+
+
+# ------------------------------------------------------------------------------- the kind to look for
+def test_the_kind_to_look_for_is_an_analysis_option_and_an_unknown_one_is_refused(client: TestClient, uploaded: dict):
+    assert client.post(f"/api/videos/{uploaded['id']}/analyze", json={"focus": "funny", "look": True}).status_code == 200
+    assert client.post(f"/api/videos/{uploaded['id']}/analyze", json={"focus": "boring"}).status_code == 422
+
+
+def test_the_options_list_the_kinds_and_what_carries_each(client: TestClient):
+    kinds = client.get("/api/options").json()["focuses"]
+
+    assert kinds[0]["key"] == "best" and {"funny", "horror", "educational"} <= {k["key"] for k in kinds}
+    assert all(k["label"] and k["hint"] and k["led_by"] in ("words", "picture") for k in kinds)
+
+
+def test_the_usual_kind_the_picture_and_the_second_look_are_settings(client: TestClient):
+    values = client.get("/api/settings").json()["values"]
+    assert (values["clips.focus"], values["clips.look"]) == ("best", False)
+
+    saved = client.put("/api/settings", json={"values": {"clips.focus": "horror", "clips.look": True, "ai.check": True}})
+
+    assert saved.status_code == 200
+    values = saved.json()["values"]
+    assert (values["clips.focus"], values["clips.look"], values["ai.check"]) == ("horror", True, True)
+    assert client.put("/api/settings", json={"values": {"clips.focus": "boring"}}).status_code == 400
+
+
+def test_a_preset_of_your_own_keeps_the_kind_and_the_picture_switch(client: TestClient):
+    made = client.post("/api/presets", json={"name": "Scares", "config": {"focus": "horror", "look": True}})
+
+    assert made.status_code == 200, made.text
+    assert (made.json()["config"]["focus"], made.json()["config"]["look"]) == ("horror", True)

@@ -36,7 +36,8 @@ CUE_SUMS = ("hook", "humor", "excitement", "surprise", "conflict", "story", "hot
             "emotion", "housekeeping")
 CATEGORY_LABELS = {"funny": "Funny moment", "hype": "Hype / clutch", "fail": "Fail", "rage": "Rage",
                    "hot_take": "Hot take", "debate": "Debate", "story": "Story", "surprise": "Surprise",
-                   "reaction": "Reaction", "highlight": "Highlight", "action": "Gameplay action"}
+                   "reaction": "Reaction", "highlight": "Highlight", "action": "Gameplay action",
+                   "scare": "Scare", "wholesome": "Wholesome", "tip": "Tip / lesson"}
 
 
 @dataclass

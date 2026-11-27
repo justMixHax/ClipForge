@@ -278,3 +278,83 @@ def test_the_tiktok_caption_is_asked_to_leave_people_something_to_comment_on():
                                         action_times=[], duration=END)
 
     assert "disagree" in prompt and "comment" in prompt
+
+
+# ------------------------------------------------------------------------- the kind of moment asked for
+def prompt_for(kind: str = "best", **more) -> str:
+    options = HighlightOptions(count=3, min_len=8, max_len=40, focus=kind)
+    return claude_review.build_prompt(SENTENCES, options, title="Friday stream", creator="Kai", game="GTA",
+                                      action_times=[], duration=END, **more)
+
+
+def test_when_a_kind_is_asked_for_claude_is_held_to_it_and_may_give_fewer_or_none():
+    from app.analysis import focus
+
+    funny = focus.get("funny")
+    prompt = prompt_for("funny")
+
+    assert "Funny moments" in prompt
+    assert funny.looking_for in prompt and funny.proof in prompt and funny.not_this in prompt
+    assert "worse than no clip" in prompt and "or none" in prompt
+    assert '"fit"' in prompt and '"proof"' in prompt
+
+
+def test_without_a_kind_the_request_reads_as_before_with_no_kind_to_hold_to():
+    prompt = prompt_for("best")
+
+    assert "What makes a good clip" in prompt
+    assert "one kind of moment" not in prompt and '"fit"' not in prompt
+
+
+def test_every_request_puts_the_opening_first_and_asks_for_other_hook_lines():
+    from app.analysis import focus
+
+    for kind in ("best", "horror"):
+        prompt = prompt_for(kind)
+        assert "first two seconds" in prompt and '"hooks"' in prompt
+        assert "never gives the payoff away" in prompt
+    assert focus.get("horror").hook in prompt_for("horror") and focus.get("horror").hook not in prompt_for("best")
+
+
+def test_with_a_second_look_coming_claude_gives_more_candidates_than_clips_wanted():
+    prompt = prompt_for("funny", shortlist=5)
+
+    assert "5 best" in prompt and "second look" in prompt and "strongest 3" in prompt
+
+
+def test_the_fit_the_proof_and_the_other_hook_lines_are_read_and_kept_in_range():
+    (pick,) = claude_review.parse_answer(answer([story_pick(
+        fit=140, proof="  It was in his hand the whole time.  ",
+        hooks=["45 minutes looking for my phone", "Where was it?", "", 7, "He looked everywhere", "a fourth"])]))
+
+    assert pick.fit == 100 and pick.proof == "It was in his hand the whole time."
+    assert pick.hooks == ["Where was it?", "He looked everywhere"]     # not the hook again, no blanks, two at most
+
+
+def test_an_answer_without_them_reads_as_before():
+    (pick,) = claude_review.parse_answer(answer([story_pick()]))
+
+    assert pick.fit is None and pick.proof == "" and pick.hooks == [] and pick.checked is None
+
+
+def test_an_answer_that_says_there_are_none_is_told_apart_from_a_broken_one():
+    with pytest.raises(claude_review.NoPicks):
+        claude_review.parse_answer(answer([]))
+    with pytest.raises(ClaudeUnavailable) as broken:
+        claude_review.parse_answer("not json at all")
+    assert not isinstance(broken.value, claude_review.NoPicks)
+
+
+def test_the_other_hook_lines_and_the_proof_go_with_the_clip():
+    (clip,) = run([story_pick(fit=90, proof="It was in his hand.", hooks=["Where was it?"])], focus="funny")
+
+    assert clip.hook_options[:2] == ["45 minutes looking for my phone", "Where was it?"]
+    proof = next(e for e in clip.evidence if e["dimension"] == "focus")
+    assert proof["quote"] == "It was in his hand." and proof["fit"] == 90
+    assert "funny moments" in proof["text"].lower()
+
+
+def test_a_clip_with_no_kind_asked_for_carries_no_note_about_one():
+    (clip,) = run([story_pick(proof="It was in his hand.")])
+
+    assert not [e for e in clip.evidence if e["dimension"] == "focus"]

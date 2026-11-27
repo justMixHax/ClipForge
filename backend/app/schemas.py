@@ -12,6 +12,8 @@ Permission = Literal["owned", "licensed", "permission", "unknown", "denied"]
 Aspect = Literal["9:16", "1:1", "4:5", "16:9"]
 Layout = Literal["auto", "fill", "fit_blur", "facecam_top", "split"]
 ContentPreset = Literal["auto", "gaming", "streamer", "podcast"]
+# the kinds of moment that can be asked for (analysis/focus.py holds what each means)
+Focus = Literal["best", "funny", "gameplay", "hype", "horror", "rage", "streamer", "wholesome", "educational", "story"]
 CaptionPreset = Literal["opus", "karaoke", "minimal", "gaming", "bold", "word"]
 Quality = Literal["speed", "balanced", "quality"]
 ReviewStatus = Literal["pending", "approved", "rejected"]
@@ -138,6 +140,8 @@ class AnalyzeIn(Strict):
     min_score: float = Field(0, ge=0, le=100)
     content_preset: ContentPreset = "auto"
     game_style: str = Field("", max_length=20)
+    focus: Focus = "best"                      # the kind of moment to look for
+    look: bool = False                         # Claude's second look also gets frames of each pick
     aspect: Aspect = "9:16"
     layout: Layout = "auto"
     captions: CaptionPreset = "opus"
@@ -156,8 +160,8 @@ class AnalyzeIn(Strict):
 
 
 # the clipping options a preset of your own keeps (the AI Clipper's "How to clip it")
-SAVED_OPTIONS = ("content_preset", "game_style", "count", "length", "min_score", "aspect", "layout", "captions",
-                 "quality", "auto_render", "remove_silence", "show_hook")
+SAVED_OPTIONS = ("content_preset", "game_style", "focus", "look", "count", "length", "min_score", "aspect", "layout",
+                 "captions", "quality", "auto_render", "remove_silence", "show_hook")
 
 
 class PresetIn(Strict):

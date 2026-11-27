@@ -13,13 +13,14 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
 
 from ..errors import JobCancelled
 from ..transcription.sentences import Sentence, Word
+from . import focus
 from .audio import AudioFeatures, _smooth
 from .candidates import WindowOptions, enumerate_windows
 from .dedupe import ExistingClip, select_distinct
@@ -50,6 +51,7 @@ class HighlightOptions:
     game_style: str = ""
     niche_keywords: tuple[str, ...] = ()
     language: str = "en"
+    focus: str = focus.DEFAULT   # the kind of moment asked for (see focus.py)
     pre_roll: float = 0.15
     post_roll: float = 0.35
 
@@ -91,10 +93,16 @@ def find_highlights(words: list[Word], sentences: list[Sentence], audio: AudioFe
             raise JobCancelled()
 
     check()
+    kind = focus.get(options.focus)
     spoken = sum(1 for w in words if w.text.strip())
     if not sentences or spoken < MIN_WORDS_FOR_SPEECH:
-        return _action_highlights(audio, visual, options, duration, existing, feedback, creator, video_title,
-                                  count=options.count, words=words, sentences=sentences)
+        return _noted(_action_highlights(audio, visual, options, duration, existing, feedback, creator, video_title,
+                                         count=options.count, words=words, sentences=sentences), kind)
+    # A kind that the picture carries (gameplay, scares): the loud, busy moments are looked at first, and what
+    # is said fills the places they leave.
+    first = (_action_highlights(audio, visual, options, duration, existing, feedback, creator, video_title,
+                                count=options.count, words=words, sentences=sentences)
+             if kind.led_by == "picture" else [])
 
     ctx = ScoringContext(words, sentences, audio, visual,
                          ScoreOptions(preset=options.preset, feedback=feedback,
@@ -116,9 +124,12 @@ def find_highlights(words: list[Word], sentences: list[Sentence], audio: AudioFe
             if on_progress is not None:
                 on_progress(0.9 * n / len(windows))
         scored.append(ctx.score(i, j))
+    if kind.key != focus.DEFAULT:
+        scored = [replace(c, score=focus.local_score(c.score, c.category, kind)) for c in scored]
 
-    picked = select_distinct(scored, options.count, existing=existing, min_score=options.min_score,
-                             uniqueness_weight=ctx.weights["uniqueness"])
+    taken_first = [ExistingClip(h.start, h.end, frozenset()) for h in first]
+    picked = select_distinct(scored, options.count - len(first), existing=[*existing, *taken_first],
+                             min_score=options.min_score, uniqueness_weight=ctx.weights["uniqueness"])
     highlights: list[Highlight] = []
     for rank, cand in enumerate(picked, 1):
         check()
@@ -129,6 +140,13 @@ def find_highlights(words: list[Word], sentences: list[Sentence], audio: AudioFe
             full.evidence.append({"dimension": "uniqueness", "impact": round(uniqueness - 100, 1), "time": None,
                                   "quote": None,
                                   "text": "Shares part of its wording with a higher-ranked clip from this video"})
+        if kind.key != focus.DEFAULT:
+            fits = full.category in kind.categories
+            full.evidence.append({
+                "dimension": "focus", "impact": focus.LOCAL_BONUS if fits else -focus.LOCAL_PENALTY, "time": None,
+                "quote": None,
+                "text": f"Asked for “{kind.label}”: the local rules "
+                        + ("read this as one" if fits else "do not read this as one")})
         text = " ".join(words[k].text for k in range(full.first_word, full.last_word + 1))
         title = build_title(ctx, full)
         hooks = build_hooks(ctx, full)
@@ -145,13 +163,16 @@ def find_highlights(words: list[Word], sentences: list[Sentence], audio: AudioFe
             description=build_description(title, creator), transcript_text=text, rank=rank,
             analysis_source="heuristic", peak_time=full.peak_time))
 
-    if len(highlights) < options.count:
+    action = list(first)
+    if len(highlights) + len(action) < options.count:
         # Places still free: offer the loud, busy moments from the stretches where almost nothing is said.
         check()
-        highlights += _action_highlights(
+        action += _action_highlights(
             audio, visual, options, duration, existing, feedback, creator, video_title,
-            count=options.count - len(highlights), words=words, sentences=sentences,
-            taken=[(h.start, h.end) for h in highlights])
+            count=options.count - len(highlights) - len(action), words=words, sentences=sentences,
+            taken=[(h.start, h.end) for h in [*highlights, *action]])
+    if action:
+        highlights += _noted(action, kind)
         highlights.sort(key=lambda h: -h.score)
         for rank, h in enumerate(highlights, 1):
             h.rank = rank
@@ -161,6 +182,18 @@ def find_highlights(words: list[Word], sentences: list[Sentence], audio: AudioFe
 
 
 # ---------------------------------------------------------------------------------------- no-speech path
+def _noted(action: list[Highlight], kind: focus.Focus) -> list[Highlight]:
+    """Moments found from sound and picture, each saying what that means for the kind of moment asked for."""
+    if kind.key != focus.DEFAULT:
+        for h in action:
+            h.evidence.append({
+                "dimension": "focus", "impact": 0.0, "time": None, "quote": None,
+                "text": f"Asked for “{kind.label}”: " + (
+                    "loud, busy moments like this one are looked at first" if kind.led_by == "picture" else
+                    "found from sound and picture only, so the local rules cannot tell whether it is one")})
+    return action
+
+
 def _resample_max(values: np.ndarray, src_hz: float, n_out: int) -> np.ndarray:
     """Down-sample by taking the maximum of each block, so short peaks are not averaged away."""
     block = max(1, int(round(src_hz * ACTION_STEP)))
@@ -312,6 +345,20 @@ def _action_highlights(audio: AudioFeatures | None, visual: VisualFeatures | Non
 
 
 # ----------------------------------------------------------------------------------------- Claude's picks
+def _second_look(checked: dict[str, Any]) -> dict[str, Any]:
+    """What Claude's second look said about a pick it kept, as a line on the clip."""
+    looked = bool(checked.get("looked"))
+    text = ("Second look, with frames of the video: " if looked else "Second look: ") + (
+        "found from sound and picture, and kept once Claude had seen it." if checked.get("unread") else
+        str(checked.get("reason") or "").strip() or "it holds up.")
+    moved = float(checked.get("moved") or 0.0)
+    if abs(moved) >= 0.05:
+        text = (text.rstrip(". ") + f". It now opens {abs(moved):.1f} s {'later' if moved > 0 else 'earlier'}, "
+                "on its strongest line.")
+    return {"dimension": "check", "impact": 0.0, "time": None, "quote": None, "text": text, "verdict": "keep",
+            "fit": checked.get("fit"), "looked": looked}
+
+
 def _cover(pick: Any) -> dict[str, str]:
     """The thumbnail words an AI wrote for its pick, if it did."""
     return {"cover_text": pick.thumb, "cover_word": pick.thumb_word} if getattr(pick, "thumb", "") else {}
@@ -331,6 +378,7 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
                                           niche_keywords=tuple(options.niche_keywords),
                                           game_style=options.game_style, language=options.language,
                                           pre_roll=options.pre_roll, post_roll=options.post_roll), duration)
+    kind = focus.get(options.focus)
     taken = [(e.start, e.end) for e in existing]
     found: list[Highlight] = []
     for pick in sorted(picks, key=lambda p: -p.score):
@@ -340,7 +388,11 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
         inside = [s.idx for s in sentences if s.end > start + 0.05 and s.start < end - 0.05]
         if source == "chatgpt" and not inside:
             continue  # ChatGPT only reads the transcript: a moment where nobody speaks is not one it heard
-        full = ctx.score(inside[0], inside[-1], explain=True) if (ctx is not None and inside) else None
+        # A moment the local rules found from sound and picture, which Claude saw and kept: it keeps its own
+        # stretch and what was measured there (a remark inside it must not shrink the clip to that remark).
+        local = getattr(pick, "local", None)
+        full = (ctx.score(inside[0], inside[-1], explain=True)
+                if (ctx is not None and inside and local is None) else None)
         if full is not None:
             start, end = full.start, full.end
         if not (max(3.0, 0.8 * options.min_len) <= end - start <= options.max_len + 10):
@@ -352,20 +404,33 @@ def highlights_from_picks(words: list[Word], sentences: list[Sentence], audio: A
         who = "ChatGPT" if source == "chatgpt" else "Claude"
         reason = pick.reason or f"{who} picked this moment."
         evidence = [{"dimension": "entertainment", "impact": 0.0, "time": None, "quote": None,
-                     "text": f"{who}: {reason}"}] + (full.evidence if full is not None else [])
-        subscores = dict(full.subscores) if full is not None else {d: 50.0 for d in DIMENSIONS}
+                     "text": f"{who}: {reason}"}]
+        if getattr(pick, "checked", None):
+            evidence.append(_second_look(pick.checked))
+        proof, fit = getattr(pick, "proof", ""), getattr(pick, "fit", None)
+        if kind.key != focus.DEFAULT and (proof or fit is not None):
+            evidence.append({"dimension": "focus", "impact": 0.0, "time": None, "quote": proof or None, "fit": fit,
+                             "text": f"Asked for “{kind.label}”: what makes this one"})
+        if full is not None:
+            evidence += full.evidence
+        elif local is not None:   # what was measured there; what the local rules guessed about the kind is not kept
+            evidence += [e for e in local.evidence if e.get("dimension") != "focus"]
+        subscores = (dict(full.subscores) if full is not None else dict(local.subscores) if local is not None
+                     else {d: 50.0 for d in DIMENSIONS})
         title = pick.title or (said[:60] if said else f"Moment at {_clock(start)}")
         hook = pick.hook or title
+        hooks = [line for line in dict.fromkeys([hook, *getattr(pick, "hooks", []), title]) if line]
         found.append(Highlight(
             start=round(start, 3), end=round(end, 3), score=pick.score, subscores=subscores,
             confidence=0.8 if source == "claude" else 0.7,
             explanation=f"{'Added by ChatGPT' if source == 'chatgpt' else 'Picked by Claude'}: {reason}",
             evidence=evidence, category=pick.category,
-            title=title, hook_text=hook, hook_options=[hook] + ([title] if title != hook else []),
+            title=title, hook_text=hook, hook_options=hooks,
             hashtags=merge_hashtags(pick.hashtags, build_hashtags(pick.category, options.preset, options.game_style,
                                                                   creator, f"{video_title} {said}")),
             description=build_description(pick.caption or title, creator), transcript_text=said, rank=0,
-            analysis_source=source, peak_time=round(full.peak_time if full is not None else start, 2),
+            analysis_source=source,
+            peak_time=round(full.peak_time if full is not None else local.peak_time if local is not None else start, 2),
             extra=_cover(pick)))
     found.sort(key=lambda h: -h.score)
     for rank, h in enumerate(found, 1):

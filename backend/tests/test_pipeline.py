@@ -832,3 +832,313 @@ def test_a_video_that_was_not_found_through_discovery_has_no_viewer_hints(video:
 
     assert "Viewers" not in asked[0]
     assert not [e for c in clips_of(video) for e in c.evidence if e["dimension"] == "viewers"]
+
+
+# ------------------------------------------------------- the kind asked for, and Claude's second look
+def second_look_on() -> None:
+    from app.services import settings_store
+    with db.session_scope() as s:
+        settings_store.set_many(s, {"ai.engine": "claude", "ai.check": True})
+
+
+def two_picks(monkeypatch, asked: list[str] | None = None) -> None:  # noqa: ANN001
+    from app.analysis import claude_review
+    from app.analysis.claude_review import Pick
+
+    def fake(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        if asked is not None:
+            asked.append(prompt)
+        return [Pick(start=14.0, end=35.0, title="Phone in his hand", hook="45 minutes", category="funny", score=91,
+                     reason="A full story with a punchline."),
+                Pick(start=1.0, end=11.5, title="Settings menu", hook="", category="funny", score=70,
+                     reason="Calm intro.")]
+
+    monkeypatch.setattr(claude_review, "ask_claude", fake)
+
+
+def said_by(job: Job, actor: str) -> list[str]:
+    return [text for who, text in lines(job) if who == actor]
+
+
+def test_the_kind_asked_for_reaches_claude_and_is_kept_with_the_analysis(video: Video, model: ScriptedModel,
+                                                                        monkeypatch):  # noqa: ANN001
+    asked: list[str] = []
+    two_picks(monkeypatch, asked)
+    claude_on()
+
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    assert "Funny moments" in asked[0] and "worse than no clip" in asked[0] and "second look" not in asked[0]
+    with db.session_scope() as s:
+        assert s.get(Video, video.id).analysis["options"]["focus"] == "funny"
+
+
+def test_the_second_look_drops_what_does_not_hold_up_and_the_log_says_why(video: Video, model: ScriptedModel,
+                                                                         monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    asked: list[str] = []
+    two_picks(monkeypatch, asked)
+    checks: list[tuple] = []
+
+    def fake_check(prompt, count, **kw):  # noqa: ANN001, ANN003, ANN202
+        checks.append((prompt, count, list(kw.get("pictures") or [])))
+        return {1: check.Verdict(keep=True, fit=80.0, reason="The punchline lands."),
+                2: check.Verdict(keep=False, fit=10.0, reason="Nothing funny happens.")}
+
+    monkeypatch.setattr(check, "ask", fake_check)
+    second_look_on()
+
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    assert "second look" in asked[0]                                   # Claude was asked for a shortlist
+    ((prompt, count, pictures),) = checks
+    assert count == 2 and pictures == [] and "Funny moments" in prompt and "Phone in his hand" in prompt
+    (clip,) = clips_of(video)
+    assert clip.title == "Phone in his hand" and clip.score == 85.5    # 91 at first, 80 on the second look
+    note = next(e for e in clip.evidence if e["dimension"] == "check")
+    assert note["verdict"] == "keep" and "punchline lands" in note["text"]
+    assert said_by(job, "claude")[-1] == ("Looked again at 2 picks: kept 1, dropped 1 "
+                                         "(“Settings menu”: Nothing funny happens).")
+    review = next(st for st in job.stages if st["key"] == "review")
+    assert "second look kept 1 of 2" in review["note"]
+
+
+def test_with_look_at_the_picture_on_frames_of_each_pick_go_to_claude(video: Video, model: ScriptedModel,
+                                                                     monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    two_picks(monkeypatch)
+    sent: list[tuple] = []
+    monkeypatch.setattr(check, "sheets", lambda source, picks: [b"sheet-%d" % n for n, _ in enumerate(picks, 1)])
+    monkeypatch.setattr(check, "ask", lambda prompt, count, **kw: sent.append((prompt, list(kw["pictures"]))) or {})
+    second_look_on()
+
+    job = analyze(video, focus="gameplay", look=True)
+
+    assert job.status == "succeeded", job.error
+    ((prompt, pictures),) = sent
+    assert pictures == [b"sheet-1", b"sheet-2"] and "picture 1 belongs to moment 1" in prompt
+    assert len(clips_of(video)) == 2                                   # no verdicts came back: the picks stand
+    assert "with frames of the video" in said_by(job, "claude")[-1]
+
+
+def test_without_it_no_frames_are_made_or_sent(video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    two_picks(monkeypatch)
+    monkeypatch.setattr(check, "sheets", lambda *a, **k: pytest.fail("frames were taken"))
+    monkeypatch.setattr(check, "ask", lambda prompt, count, **kw: {} if not kw.get("pictures") else pytest.fail("sent"))
+    second_look_on()
+
+    assert analyze(video, focus="gameplay").status == "succeeded"
+
+
+def test_when_the_second_look_cannot_be_taken_the_picks_stand_and_the_job_says_so(video: Video, model: ScriptedModel,
+                                                                                 monkeypatch):  # noqa: ANN001
+    from app.analysis import check, claude_review
+
+    two_picks(monkeypatch)
+
+    def limit(prompt, count, **kw):  # noqa: ANN001, ANN003, ANN202
+        raise claude_review.ClaudeUnavailable("Your Claude plan's usage limit is reached, so the local rules picked "
+                                              "the clips this time.", hint="Analyse the video again after the limit resets.")
+
+    monkeypatch.setattr(check, "ask", limit)
+    second_look_on()
+
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    clips = clips_of(video)
+    assert len(clips) == 2 and not [e for c in clips for e in c.evidence if e["dimension"] == "check"]
+    assert said_by(job, "claude")[-1] == ("Could not take a second look: Your Claude plan's usage limit is reached. "
+                                         "The picks stand unchecked.")
+    assert "usage limit" in job.result["note"]
+
+
+def test_with_the_second_look_switched_off_claude_is_asked_once(video: Video, model: ScriptedModel,
+                                                               monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    asked: list[str] = []
+    two_picks(monkeypatch, asked)
+    monkeypatch.setattr(check, "ask", lambda *a, **k: pytest.fail("a second look was taken"))
+    claude_on()
+
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    assert len(asked) == 1 and len(clips_of(video)) == 2
+
+
+def test_when_the_video_has_none_of_the_kind_no_clips_are_made_and_the_job_says_so(video: Video, model: ScriptedModel,
+                                                                                  monkeypatch):  # noqa: ANN001
+    from app.analysis import claude_review
+
+    def none(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        raise claude_review.NoPicks("Claude returned no picks, so the local rules picked the clips this time.")
+
+    monkeypatch.setattr(claude_review, "ask_claude", none)
+    claude_on()
+
+    job = analyze(video, focus="horror")
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video) == []
+    assert job.result["note"] == ("Claude found nothing in this video that holds up as “Horror / scares”. "
+                                  "Try “Best moments” or another kind.")
+    assert said_by(job, "claude") == ["Found nothing that holds up as “Horror / scares”."]
+
+
+def test_when_the_second_look_keeps_nothing_no_clips_are_made_either(video: Video, model: ScriptedModel,
+                                                                    monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    two_picks(monkeypatch)
+    monkeypatch.setattr(check, "ask", lambda prompt, count, **kw: {
+        n: check.Verdict(keep=False, fit=5.0, reason="Not funny.") for n in (1, 2)})
+    second_look_on()
+
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video) == [] and "holds up as “Funny moments”" in job.result["note"]
+
+
+def test_with_no_kind_asked_for_an_empty_answer_still_falls_back_to_the_local_picks(video: Video, model: ScriptedModel,
+                                                                                   monkeypatch):  # noqa: ANN001
+    from app.analysis import claude_review
+
+    def none(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        raise claude_review.NoPicks("Claude returned no picks, so the local rules picked the clips this time.")
+
+    monkeypatch.setattr(claude_review, "ask_claude", none)
+    claude_on()
+
+    job = analyze(video)
+
+    assert job.status == "succeeded", job.error
+    clips = clips_of(video)
+    assert clips and all(c.analysis_source != "claude" for c in clips)
+
+
+def test_with_the_local_rules_the_kind_asked_for_is_approximated_and_the_log_says_so(video: Video,
+                                                                                    model: ScriptedModel):
+    job = analyze(video, focus="funny")
+
+    assert job.status == "succeeded", job.error
+    clips = clips_of(video)
+    assert clips and all(any(e["dimension"] == "focus" for e in c.evidence) for c in clips)
+    assert any("“Funny moments”" in text and "own rules" in text for text in said_by(job, "forge"))
+
+
+# ---------------------------------------- a kind the picture carries: loud, busy moments get looked at
+def loud_busy_moment(monkeypatch) -> None:  # noqa: ANN001
+    """As if the local rules had found one loud, busy moment where nothing is said."""
+    from app.analysis.engine import Highlight
+
+    found = Highlight(start=2.0, end=14.0, score=60.0, subscores={"visual": 80.0}, confidence=0.38,
+                      explanation="Sound peaks 17 dB above the surrounding level.",
+                      evidence=[{"dimension": "emotion", "impact": 40.0, "time": 8.0, "quote": None,
+                                 "text": "Sound peaks 17 dB above the surrounding level"}],
+                      category="action", title="Action at 0:08", hook_text="", hook_options=[], hashtags=[],
+                      description="", transcript_text="", rank=1, analysis_source="signals-only", peak_time=8.0)
+    monkeypatch.setattr(pipeline, "find_highlights", lambda *a, **k: [found])
+
+
+def nothing_read(monkeypatch) -> list[str]:  # noqa: ANN001
+    """Claude finds nothing of the kind in the words."""
+    from app.analysis import claude_review
+
+    asked: list[str] = []
+
+    def none(prompt, **kw):  # noqa: ANN001, ANN003, ANN202
+        asked.append(prompt)
+        raise claude_review.NoPicks("Claude returned no picks, so the local rules picked the clips this time.")
+
+    monkeypatch.setattr(claude_review, "ask_claude", none)
+    return asked
+
+
+def test_asked_for_a_kind_the_picture_carries_loud_busy_moments_are_looked_at_too(video: Video, model: ScriptedModel,
+                                                                                 monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    loud_busy_moment(monkeypatch)
+    asked = nothing_read(monkeypatch)
+    seen: list[tuple] = []
+    monkeypatch.setattr(check, "sheets", lambda source, picks: [b"sheet"] * len(picks))
+
+    def fake_check(prompt, count, **kw):  # noqa: ANN001, ANN003, ANN202
+        seen.append((prompt, count, len(kw["pictures"])))
+        return {1: check.Verdict(keep=True, fit=90.0, reason="A clean chase.", title="The dragon dives")}
+
+    monkeypatch.setattr(check, "ask", fake_check)
+    second_look_on()
+
+    job = analyze(video, focus="horror", look=True)
+
+    assert job.status == "succeeded", job.error
+    assert "the second look will see" in asked[0]              # Claude may give such moments on its own, too
+    ((prompt, count, pictures),) = seen
+    assert (count, pictures) == (1, 1) and "found from sound and picture alone" in prompt
+    (clip,) = clips_of(video)
+    assert (clip.title, clip.analysis_source, clip.score, clip.category) == ("The dragon dives", "claude", 75.0, "scare")
+    assert (clip.start, clip.end) == (2.0, 14.0)
+    assert any("1 loud, busy moment" in text for text in said_by(job, "forge"))
+    assert said_by(job, "claude") == ["Looked again at 1 pick, with frames of the video: kept 1, dropped 0.",
+                                      "Made 1 clip of them: “The dragon dives”."]
+
+
+def test_without_the_picture_such_moments_are_not_put_to_claude_and_the_log_says_what_would_help(
+        video: Video, model: ScriptedModel, monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    loud_busy_moment(monkeypatch)
+    asked = nothing_read(monkeypatch)
+    monkeypatch.setattr(check, "ask", lambda *a, **k: pytest.fail("nothing to look at, yet a second look was taken"))
+    second_look_on()
+
+    job = analyze(video, focus="horror")
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video) == [] and "the second look will see" not in asked[0]
+    assert any("Let Claude look at the picture too" in text for text in said_by(job, "forge"))
+
+
+def test_when_frames_cannot_be_taken_such_moments_are_left_out(video: Video, model: ScriptedModel,
+                                                              monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    loud_busy_moment(monkeypatch)
+    nothing_read(monkeypatch)
+    monkeypatch.setattr(check, "sheets", lambda source, picks: [])
+    monkeypatch.setattr(check, "ask", lambda *a, **k: pytest.fail("a moment nobody can see was put to Claude"))
+    second_look_on()
+
+    job = analyze(video, focus="horror", look=True)
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video) == []
+
+
+def test_a_dropped_moment_that_never_got_a_title_is_named_by_its_time_in_the_log(video: Video, model: ScriptedModel,
+                                                                                monkeypatch):  # noqa: ANN001
+    from app.analysis import check
+
+    loud_busy_moment(monkeypatch)
+    nothing_read(monkeypatch)
+    monkeypatch.setattr(check, "sheets", lambda source, picks: [b"sheet"] * len(picks))
+    monkeypatch.setattr(check, "ask", lambda prompt, count, **kw: {
+        1: check.Verdict(keep=False, fit=5.0, reason="Just scenery.")})
+    second_look_on()
+
+    job = analyze(video, focus="horror", look=True)
+
+    assert job.status == "succeeded", job.error
+    assert clips_of(video) == []
+    assert ("Looked again at 1 pick, with frames of the video: kept 0, dropped 1 (the moment at 0:02: Just scenery)."
+            in said_by(job, "claude"))

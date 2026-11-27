@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ..analysis import focus
 from ..analysis.presets import LENGTH_RANGES
 from ..analysis.chatgpt_review import valid_model
 from ..config import get_settings
@@ -53,6 +54,8 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "processing.language": ("auto", _text(8)),
     "clips.content_preset": ("auto", _choice("auto", "gaming", "streamer", "podcast")),
     "clips.game_style": ("", _text(20)),
+    "clips.focus": (focus.DEFAULT, _choice(*focus.FOCUSES)),   # the kind of moment usually looked for
+    "clips.look": (False, _flag),                              # Claude's second look also gets frames of each pick
     "clips.count": (5, _number(1, 30)),
     "clips.length": ("15-60", _choice(*LENGTH_RANGES)),
     "clips.min_score": (55, _number(0, 100)),
@@ -67,6 +70,7 @@ SCHEMA: dict[str, tuple[Any, Callable[[Any], bool]]] = {
     "export.folder": ("", _text(400)),
     "ai.engine": ("claude", _choice("claude", "local")),
     "ai.claude_model": ("sonnet", _choice("sonnet", "opus", "haiku")),
+    "ai.check": (True, _flag),                                 # Claude takes a second look at every pick
     "ai.second_opinion": ("chatgpt", _choice("chatgpt", "off")),
     "ai.chatgpt_model": ("gpt-6.2-astra", lambda v: isinstance(v, str) and valid_model(v)),
     "llm.provider": ("none", _choice("none", "ollama", "openai", "anthropic")),

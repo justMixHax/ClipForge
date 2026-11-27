@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .. import __version__
 from ..analysis.feedback import FeedbackProfile
+from ..analysis.focus import FOCUSES
 from ..analysis.lexicon import content_tokens
 from ..analysis.presets import (CONTENT_PRESETS, DIMENSION_LABELS, DIMENSIONS, GAME_STYLES, LENGTH_RANGES,
                                 WORKFLOW_PRESETS)
@@ -195,6 +196,8 @@ def options() -> dict:
                              "layout": v["layout"]} for k, v in CONTENT_PRESETS.items()],
         "workflow_presets": [{"key": k, **v} for k, v in WORKFLOW_PRESETS.items()],
         "game_styles": [{"key": k, "label": v["label"]} for k, v in GAME_STYLES.items()],
+        "focuses": [{"key": kind.key, "label": kind.label, "hint": kind.hint, "led_by": kind.led_by}
+                    for kind in FOCUSES.values()],
         "length_ranges": [{"key": k, "min": a, "max": b, "label": f"{a:g}–{b:g} s"} for k, (a, b) in LENGTH_RANGES.items()],
         "aspects": [{"key": k, "width": w, "height": h} for k, (w, h) in ASPECTS.items()],
         "layouts": [{"key": k, "label": v} for k, v in LAYOUT_LABELS.items()],

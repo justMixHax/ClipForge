@@ -8,15 +8,15 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 1,162 tests, about six and a half minutes (most of it real renders), plus a type-check of the
+The fast suite: 1,235 tests, about eight and a half minutes (most of it real renders), plus a type-check of the
 interface. No speech model is needed; tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 1,178
-tests, about eight minutes. They need the sample video, which is not kept in Git:
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 1,243
+tests, about ten minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
@@ -25,8 +25,21 @@ powershell -ExecutionPolicy Bypass -File scripts\make-sample.ps1
 To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m pytest tests\test_scoring.py`
 (the environment's location is in `.venv-path`).
 
-**Last full run:** 25 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 1,178 passed,
-0 failed, 0 skipped, in 7 minutes 54 seconds.
+**Last full run:** 27 November 2026, on the PC described in [SETUP_WINDOWS.md](SETUP_WINDOWS.md): 1,243 passed,
+0 failed, 0 skipped, in two runs: the fast suite's 1,235 in 8 minutes 28 seconds, then the 8 slow tests in
+1 minute 30 seconds. (Two wordings in the requests to Claude were changed after the fast run; the 143 tests of
+the requests, the second look and the analysis job were run again and passed.)
+
+**Tried for real, 27 November 2026 (the kind of moment asked for, and Claude's second look):** on a separate copy
+holding only Sintel (© Blender Foundation, CC BY 3.0), with Claude Sonnet through the Claude Code tool and frames
+switched on. Asked for wholesome moments, Claude shortlisted two, kept "Goodnight, Scales" (it named the care for
+a wounded little creature and the smile, which are in the frames and not in the six words said) and dropped the
+other with its reason, in 72 seconds with the transcription. Asked for scares, in a film with almost no talk, its
+first pass at first found nothing at all: it only reads words. That is why the loud, busy moments now go to the
+second look with their frames; on the run after that change it was shown three, kept two and named them from what
+it saw ("Face-Off in the Dark Cave", "Ambush in the Snow"), and dropped both moments its first pass had picked
+from the words, in 36 seconds. Not tried: a long real stream, the other eight kinds, and the picker's choices
+against a person's own judgement of what is funny.
 
 **On GitHub:** `.github/workflows/tests.yml` runs the fast suite and builds the interface on every push and
 pull request, on GitHub's Windows machines. First run, 25 November 2026: the interface built in about a minute;

@@ -149,7 +149,9 @@ export interface Video {
 
 export interface Evidence {
   dimension: string;
-  verdict?: "agree" | "disagree";
+  verdict?: "agree" | "disagree" | "keep";   // ChatGPT's on a pick; "keep" from Claude's second look
+  fit?: number | null;                        // 0-100: how clearly it is the kind of moment asked for
+  looked?: boolean;                           // the second look also had frames of the video
   impact: number;
   text: string;
   time: number | null;
@@ -374,6 +376,7 @@ export interface Options {
   content_presets: (Preset & { captions: string; layout: string })[];
   workflow_presets: Preset<WorkflowConfig>[];
   game_styles: { key: string; label: string }[];
+  focuses: { key: string; label: string; hint: string; led_by: "words" | "picture" }[];   // the kinds of moment
   length_ranges: { key: string; min: number; max: number; label: string }[];
   aspects: { key: string; width: number; height: number }[];
   layouts: { key: string; label: string }[];

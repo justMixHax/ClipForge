@@ -168,3 +168,27 @@ def test_a_burst_squeezed_between_two_long_stretches_of_talk_cannot_become_a_cli
     visual = make_visual(total, busy=[(gap_start + 0.5, gap_start + 3.5, 0.4)])
 
     assert action_only(words, build_sentences(words), audio, visual, total) == []
+
+
+# ------------------------------------------------------------------------ a kind of moment was asked for
+def test_asked_for_gameplay_the_loud_busy_moments_come_first_even_though_there_is_talk(game: Gameplay):
+    plain, wanted = game.run(count=2), game.run(count=2, focus="gameplay")
+
+    assert any(spoken(h) for h in plain)                      # without a kind, the words decide first
+    assert [spoken(h) for h in wanted] == [False, False]
+    assert covers(wanted[0], FIRST_ACTION) or covers(wanted[1], FIRST_ACTION)
+
+
+def test_asked_for_a_kind_every_local_pick_says_whether_it_is_one(game: Gameplay):
+    from app.analysis import focus
+
+    funny = focus.get("funny")
+    for h in game.run(focus="funny"):
+        note = next(e for e in h.evidence if e["dimension"] == "focus")
+        if spoken(h):
+            assert note["impact"] == (focus.LOCAL_BONUS if h.category in funny.categories else -focus.LOCAL_PENALTY)
+        assert "Funny moments" in note["text"]
+
+
+def test_with_no_kind_asked_for_the_local_picks_carry_no_such_note(game: Gameplay):
+    assert not [e for h in game.run() for e in h.evidence if e["dimension"] == "focus"]

@@ -165,6 +165,21 @@ need publishing or analytics show a dash.
   posts on one account are kept at least 3 hours apart (a new setting). What that video says about hiding
   reposts, proxies and warming up accounts was deliberately not taken.
 
+## Done on 27 November 2026
+
+- ✅ **You say what you are looking for.** Ten kinds of moment (best moments, funny, gameplay showcase, hype,
+  horror, rage, streamer moments, wholesome, educational, stories and hot takes), chosen in the AI Clipper and with
+  a pasted link, kept in your own presets. Claude is held to the kind, quotes what makes each pick one, and gives
+  fewer or none when the video does not have them.
+- ✅ **Claude's second look.** Every pick is gone through again; what does not hold up is dropped with its reason
+  in the work log; a kept clip can open on a stronger line and get a better on-screen line. With **Let Claude look
+  at the picture too**, frames of each pick go with it, and for gameplay, hype and scares the loud, busy moments
+  are judged by their frames and named by Claude.
+- Tried for real on Sintel with Claude Sonnet: asked for wholesome moments, it kept one of two picks and said why
+  the other went; asked for scares in a film with almost no talk, it kept and named two of three loud moments it
+  was shown. Not tried yet on a long real stream, and the kinds' wording has not been tuned on many videos: expect
+  to adjust it.
+
 ## What needs you
 
 Clipping your own files needs nothing but the setup script. Everything that talks to a service uses an

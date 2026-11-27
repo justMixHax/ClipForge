@@ -21,9 +21,11 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
+from . import focus
 from .answers import json_answers, seconds
 from .describe import clean_caption, clean_hashtags, clean_words
 from .scoring import CATEGORY_LABELS
@@ -39,6 +41,11 @@ class ClaudeUnavailable(ClipForgeError):
     """Claude could not give an answer. The message says why in plain words."""
 
 
+class NoPicks(ClaudeUnavailable):
+    """Claude answered, and its answer was that there is nothing to pick. When a kind of moment was asked for,
+    that is an answer in its own right (the video has none), not a failure."""
+
+
 @dataclass
 class Pick:
     start: float
@@ -52,6 +59,12 @@ class Pick:
     thumb_word: str = ""                              # the one of them shown in colour
     caption: str = ""                                 # the TikTok caption, without hashtags
     hashtags: list[str] = field(default_factory=list)
+    fit: float | None = None                          # 0-100: how clearly it is the kind of moment asked for
+    proof: str = ""                                   # the line or the event that makes it that kind
+    hooks: list[str] = field(default_factory=list)    # other ways to say the hook, to choose from
+    checked: dict | None = None                       # what the second look said (see check.apply)
+    local: Any = None                                 # the local rules' own find, when Claude did not read this
+                                                      # moment but was shown it (see check.from_signals)
 
 
 def clock(seconds: float) -> str:
@@ -153,40 +166,84 @@ def viewer_hints(moments: Sequence[dict]) -> str:
             + "\n".join(lines) + "\n")
 
 
-def build_prompt(sentences: Sequence[Sentence], options, *, title: str, creator: str, game: str,  # noqa: ANN001
-                 action_times: Sequence[float], duration: float, viewer_moments: Sequence[dict] = ()) -> str:
-    lines = [f"[{clock(s.start)}] {s.text}" for s in sentences]
-    action = ", ".join(clock(t) for t in action_times[:40]) or "none found"
-    by = f" by {creator}" if creator else ""
-    playing = f" (game: {game})" if game else ""
-    viewers = viewer_hints(viewer_moments)
-    return f"""You are the clip picker of ClipForge, a tool that cuts long videos into short vertical clips for
-TikTok, YouTube Shorts and Instagram Reels.
-
-Video: "{title}"{by}{playing}, {clock(duration)} long.
-
-Pick the {options.count} best moments to post as clips (fewer if there are not that many good ones). Each clip
-must be between {options.min_len:g} and {options.max_len:g} seconds long.
-
-What makes a good clip:
+GOOD_CLIP = """What makes a good clip:
 - It works on its own for someone who has not seen the rest of the video.
 - It is genuinely funny, surprising, tense, impressive or interesting: deadpan banter, comebacks, callbacks,
   fake names, absurd situations, a clear story with a punchline, a fight or a big moment.
 - It starts at the start of a line (with any setup the joke needs) and ends right after the punchline or
   payoff, not in the middle of a sentence.
-- Loud does not mean good. Shouting during a struggle is only worth it if something happens.
-Moments where little is said but a lot happens are listed here as loud or busy: {action}. Use them only if the
+- Loud does not mean good. Shouting during a struggle is only worth it if something happens."""
+OF_A_KIND = """Pick only moments of this kind. A clip of another kind is worse than no clip: give fewer than asked for,
+or none, when the video does not have them.
+
+Every clip must also work on its own for someone who has not seen the rest of the video, start at the start of a
+line (with any setup it needs) and end right after its payoff, not in the middle of a sentence. Loud does not mean
+good: shouting is only worth it if something happens."""
+
+
+def opening_rules(kind: focus.Focus) -> str:
+    """How every clip should open, and for a kind of moment, how that kind should."""
+    own = f"\n- {kind.hook}" if kind.hook else ""
+    return f"""The first two seconds decide whether people keep watching, so open every clip on its strongest second:
+- Start on a line that raises a question, on a reaction, or on the moment just before things turn. Leave out the
+  warm-up: greetings, "so anyway", dead air, a line that only makes sense with what came before.{own}
+- "hook" is the line shown on screen during those seconds, at most 12 words: it makes people curious and
+  never gives the payoff away. "hooks" holds two other ways to say it."""
+
+
+def build_prompt(sentences: Sequence[Sentence], options, *, title: str, creator: str, game: str,  # noqa: ANN001
+                 action_times: Sequence[float], duration: float, viewer_moments: Sequence[dict] = (),
+                 shortlist: int | None = None, frames: bool = False) -> str:
+    """The request to pick the clips. options.focus is the kind of moment asked for. With a shortlist, Claude
+    gives that many candidates, because a second look will go through them (see check.py); with frames, that
+    second look also sees each candidate, so a moment where little is said can be given on its own."""
+    lines = [f"[{clock(s.start)}] {s.text}" for s in sentences]
+    action = ", ".join(clock(t) for t in action_times[:40]) or "none found"
+    by = f" by {creator}" if creator else ""
+    playing = f" (game: {game})" if game else ""
+    viewers = viewer_hints(viewer_moments)
+    kind = focus.get(getattr(options, "focus", focus.DEFAULT))
+    of_a_kind = kind.key != focus.DEFAULT
+    if shortlist:
+        task = (f"Give your {shortlist} best candidates{' of this kind' if of_a_kind else ''} to post as clips, best "
+                f"first (fewer{', or none,' if of_a_kind else ''} if the video does not have that many good ones): a "
+                f"second look will go through them and keep the strongest {options.count}.")
+    else:
+        task = (f"Pick the {options.count} best moments{' of this kind' if of_a_kind else ''} to post as clips (fewer"
+                f"{', or none,' if of_a_kind else ''} if there are not that many good ones).")
+    wanted = f"{focus.brief(kind)}\n{OF_A_KIND}" if of_a_kind else GOOD_CLIP
+    scoring = ('"fit" is 0-100 for how clearly it is the kind asked for, and "proof" is the line you can quote or '
+               "the event you can name that makes it so. " if of_a_kind else
+               '"proof" is the line you can quote or the event you can name that carries the clip. ')
+    fit_field = '"fit": 90, ' if of_a_kind else ""
+    seen = frames and kind.led_by == "picture"     # the second look will see each candidate of this kind
+    quiet = ("For this kind you may give one of them on its own, even when little is said around it: the second "
+             "look will see its frames. Otherwise use" if seen else "Use")
+    times = "the transcript or the loud-or-busy list" if seen else "the transcript"
+    return f"""You are the clip picker of ClipForge, a tool that cuts long videos into short vertical clips for
+TikTok, YouTube Shorts and Instagram Reels.
+
+Video: "{title}"{by}{playing}, {clock(duration)} long.
+
+{wanted}
+
+{task} Each clip must be between {options.min_len:g} and {options.max_len:g} seconds long.
+
+{opening_rules(kind)}
+
+Moments where little is said but a lot happens are listed here as loud or busy: {action}. {quiet} them only if the
 lines around them suggest something worth seeing.
 {viewers}
-Rules: use only times from the transcript. Never invent words, quotes or events: titles, hooks, thumbnail words
+Rules: use only times from {times}. Never invent words, quotes or events: titles, hooks, thumbnail words
 and captions must reflect what is really said and shown. Score each pick 0-100 for how likely it is to work as a
-short, honestly; it is an estimate, not a promise. Category is one of: {', '.join(CATEGORY_LABELS)}.
+short, honestly; it is an estimate, not a promise. {scoring}Category is one of: {', '.join(CATEGORY_LABELS)}.
 
 {POST_TEXT}
 
 Answer with JSON only, in this shape:
 {{"picks": [{{"start": 251.0, "end": 301.5, "title": "short catchy title", "hook": "on-screen line, max 12 words",
-"category": "funny", "score": 85, "reason": "one sentence on why this works", {POST_FIELDS}}}]}}
+"hooks": ["another way to say it", "a third way"], "category": "funny", "score": 85, {fit_field}
+"proof": "the line or the event", "reason": "one sentence on why this works", {POST_FIELDS}}}]}}
 Times are in seconds from the start of the video.
 
 Transcript, one line per sentence, with its start time (h:mm:ss or m:ss):
@@ -277,12 +334,14 @@ def parse_answer(printed: str) -> list[Pick]:
     text = str(envelope.get("result") or "")
     if envelope.get("is_error"):
         raise _explain(text or str(envelope)[:300])
+    said_none = False
     for data in json_answers(text):  # the last block first: a correction comes after its draft
         picks = _picks(data.get("picks"))
         if picks:
             return picks
-    raise ClaudeUnavailable("Claude returned no picks, so the local rules picked the clips this time.",
-                            hint=text[:300])
+        said_none = said_none or data.get("picks") == []
+    problem = NoPicks if said_none else ClaudeUnavailable
+    raise problem("Claude returned no picks, so the local rules picked the clips this time.", hint=text[:300])
 
 
 def _picks(raw: object) -> list[Pick]:
@@ -295,13 +354,26 @@ def _picks(raw: object) -> list[Pick]:
         if start is None or end is None or end <= start or start < 0:
             continue
         category = str(item.get("category") or "highlight").strip().lower().replace(" ", "_")
-        score = _number(item.get("score"))
-        picks.append(Pick(start=start, end=end, title=str(item.get("title") or "").strip()[:200],
-                          hook=str(item.get("hook") or "").strip()[:120],
+        score, fit = _number(item.get("score")), _number(item.get("fit"))
+        hook = str(item.get("hook") or "").strip()[:120]
+        picks.append(Pick(start=start, end=end, title=str(item.get("title") or "").strip()[:200], hook=hook,
                           category=category if category in CATEGORY_LABELS else "highlight",
                           score=round(min(100.0, max(0.0, score if score is not None else 60.0)), 1),
-                          reason=str(item.get("reason") or "").strip()[:400], **post_text(item)))
+                          reason=str(item.get("reason") or "").strip()[:400],
+                          fit=None if fit is None else round(min(100.0, max(0.0, fit)), 1),
+                          proof=" ".join(str(item.get("proof") or "").split())[:300],
+                          hooks=other_lines(item.get("hooks"), hook), **post_text(item)))
     return picks
+
+
+def other_lines(raw: object, hook: str, most: int = 2) -> list[str]:
+    """The other hook lines an AI gave: text only, no blanks, none said twice, not the hook itself."""
+    lines: list[str] = []
+    for item in raw if isinstance(raw, list) else []:
+        line = " ".join(item.split())[:120] if isinstance(item, str) else ""
+        if line and line.lower() not in {hook.lower(), *(known.lower() for known in lines)} and len(lines) < most:
+            lines.append(line)
+    return lines
 
 
 # -------------------------------------------------------------------------------------------- the call

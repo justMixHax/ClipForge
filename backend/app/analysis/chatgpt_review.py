@@ -24,6 +24,7 @@ from typing import Any
 
 from ..errors import ClipForgeError, JobCancelled
 from ..transcription.sentences import Sentence
+from . import focus
 from .answers import json_answers, seconds
 from .claude_review import POST_FIELDS, POST_TEXT, Pick, clock, post_text
 from .scoring import CATEGORY_LABELS
@@ -148,6 +149,9 @@ def build_prompt(sentences: Sequence[Sentence], picks: Sequence[Any], options, *
         f"{n}. {clock(p.start)}-{clock(p.end)} \"{p.title}\" ({p.category}, score {p.score:.0f}): "
         f"{(p.explanation or '').replace('Picked by Claude: ', '')}" for n, p in enumerate(picks, 1)) or "(none)"
     by = f" by {creator}" if creator else ""
+    kind = focus.get(getattr(options, "focus", focus.DEFAULT))
+    asked = (f"\nThe user asked for one kind of moment: {kind.label}. {kind.looking_for} Judge each pick as that "
+             "kind, and only add moments of that kind.\n" if kind.key != focus.DEFAULT else "")
     if chosen_by_user:
         return f"""You are the second opinion in ClipForge, a tool that cuts long videos into short vertical clips for
 TikTok, YouTube Shorts and Instagram Reels. The moment below was chosen by the user while watching the video.
@@ -171,7 +175,7 @@ TikTok, YouTube Shorts and Instagram Reels. Another AI already picked the clips 
 transcript. Review them honestly. Work only from the text given here; do not run commands or open files.
 
 Video: "{title}"{by}.
-
+{asked}
 The picks:
 {numbered}
 

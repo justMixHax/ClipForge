@@ -198,6 +198,7 @@ export function useFoundVideos(filters: FoundVideoFilters, enabled = true) {
 export function analyzeDefaults(values: Record<string, unknown>): Record<string, unknown> {
   return {
     content_preset: String(values["clips.content_preset"] ?? "auto"), game_style: String(values["clips.game_style"] ?? ""),
+    focus: String(values["clips.focus"] ?? "best"), look: Boolean(values["clips.look"] ?? false),
     count: Number(values["clips.count"] ?? 5), length: String(values["clips.length"] ?? "15-60"),
     min_score: Number(values["clips.min_score"] ?? 55), aspect: String(values["clips.aspect"] ?? "9:16"),
     layout: String(values["clips.layout"] ?? "auto"), captions: String(values["clips.captions"] ?? "opus"),

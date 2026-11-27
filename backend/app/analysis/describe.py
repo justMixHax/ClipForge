@@ -20,7 +20,7 @@ HOOK_MAX_WORDS = 14
 NON_LEXICAL = {"ha", "haha", "hahaha", "lol", "woo", "ah", "yes", "wow", "hey", "ooh", "whoa"}
 CATEGORY_TAGS = {"funny": "#funny", "hype": "#clutch", "fail": "#fail", "rage": "#rage", "hot_take": "#hottake",
                  "debate": "#debate", "story": "#storytime", "surprise": "#unexpected", "reaction": "#reaction",
-                 "action": "#gameplay"}
+                 "action": "#gameplay", "scare": "#horror", "wholesome": "#wholesome", "tip": "#tips"}
 PRESET_TAGS = {"gaming": ["#gaming", "#gamingclips"], "streamer": ["#streamer", "#clips"],
                "podcast": ["#podcast", "#podcastclips"], "auto": ["#clips"]}
 GAME_PATTERNS = {"gta": r"\bgta\b|grand theft auto|vice city", "dayz": r"\bday ?z\b",

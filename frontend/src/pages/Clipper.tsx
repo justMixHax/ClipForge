@@ -4,6 +4,7 @@ import { Bookmark, BookmarkPlus, FolderOpen, HardDrive, RotateCcw, ShieldAlert, 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ClipCard, ClipViewer, RightsBadge, SourcePeek, useClipActions } from "../components/clips";
+import { FocusPicker } from "../components/FocusPicker";
 import { JobStages } from "../components/JobStages";
 import { LinkImport } from "../components/LinkImport";
 import { MomentClip, type MomentTimes } from "../components/MomentClip";
@@ -18,6 +19,8 @@ type ClipOptions = {
   workflow: string;
   content_preset: string;
   game_style: string;
+  focus: string;      // the kind of moment to look for
+  look: boolean;      // Claude's second look also gets frames of each pick
   count: number;
   length: string;
   min_score: number;
@@ -29,17 +32,19 @@ type ClipOptions = {
   remove_silence: boolean;
   show_hook: boolean;
 };
+type Kind = Pick<ClipOptions, "focus" | "look"> & { onFocus: (key: string) => void; onLook: (on: boolean) => void };
 
 const DEFAULTS: ClipOptions = {
-  workflow: "custom", content_preset: "auto", game_style: "", count: 5, length: "15-60", min_score: 55, aspect: "9:16",
+  workflow: "custom", content_preset: "auto", game_style: "", focus: "best", look: false, count: 5, length: "15-60", min_score: 55, aspect: "9:16",
   layout: "auto", captions: "opus", quality: "balanced", auto_render: true, remove_silence: false, show_hook: true,
 };
 const VIDEO_TYPES = [".mp4", ".mov", ".mkv", ".webm", ".m4v"];
 
-function SourcePicker({ onPicked, onImported, analyzeBody }: {
+function SourcePicker({ onPicked, onImported, analyzeBody, kind }: {
   onPicked: (video: Video) => void;
   onImported: (videoId: number) => void;
   analyzeBody: () => Record<string, unknown>;
+  kind: Kind;
 }) {
   const videos = useVideos();
   const options = useOptions();
@@ -114,7 +119,7 @@ function SourcePicker({ onPicked, onImported, analyzeBody }: {
       </div>
       <ErrorNote error={error} />
 
-      <LinkImport analyzeBody={analyzeBody} onImported={onImported} />
+      <LinkImport analyzeBody={analyzeBody} onImported={onImported} kind={<FocusPicker {...kind} />} />
 
       <Field label="Or add a video that is already on this PC" hint="Links the file where it is. Nothing is copied, and ClipForge never changes or deletes your original.">
         <div className="flex gap-2">
@@ -250,6 +255,7 @@ function OptionsPanel({ value, onChange }: { value: ClipOptions; onChange: (next
   const chip = (active: boolean) => cx("rounded-full border text-[12.5px] transition-colors", active ? "border-accent/60 bg-accent/10 text-accent-soft" : "border-line text-muted hover:border-line-strong hover:text-ink");
   return (
     <div className="space-y-4">
+      <FocusPicker focus={value.focus} look={value.look} onFocus={(key) => set("focus", key)} onLook={(on) => set("look", on)} />
       <Field label="Start from a preset" group hint={mine ? `Your preset “${mine.name}”.` : options?.workflow_presets.find((p) => p.key === value.workflow)?.description ?? "Your own settings."}>
         <div className="flex flex-wrap gap-1.5">
           {options?.workflow_presets.map((p) => (
@@ -363,6 +369,7 @@ export default function Clipper() {
     if (!v || loaded) return;
     setOpts((current) => ({
       ...current, content_preset: String(v["clips.content_preset"]), game_style: String(v["clips.game_style"]),
+      focus: String(v["clips.focus"] ?? "best"), look: Boolean(v["clips.look"] ?? false),
       count: Number(v["clips.count"]), length: String(v["clips.length"]), min_score: Number(v["clips.min_score"]),
       aspect: String(v["clips.aspect"]), layout: String(v["clips.layout"]), captions: String(v["clips.captions"]),
       quality: String(v["processing.priority"]), auto_render: Boolean(v["clips.auto_render"]), show_hook: Boolean(v["clips.show_hook"]),
@@ -444,6 +451,12 @@ export default function Clipper() {
   };
 
   const blocked = video.data?.permission_status === "denied";
+  const kind: Kind = {
+    focus: opts.focus, look: opts.look,
+    onFocus: (key) => setOpts((current) => ({ ...current, focus: key })),
+    onLook: (on) => setOpts((current) => ({ ...current, look: on })),
+  };
+  const analysisNote = String((video.data?.analysis as { note?: string } | null)?.note || "");
 
   return (
     <div className="grid gap-6 xl:grid-cols-[410px_minmax(0,1fr)]">
@@ -454,7 +467,7 @@ export default function Clipper() {
             {videoId !== null && video.isError ? (
               <div className="space-y-3"><ErrorNote error={video.error} /><Button onClick={() => pick(null)}>Choose another video</Button></div>
             ) : video.data ? <SourceCard video={video.data} onChange={() => pick(null)} />
-              : <SourcePicker onPicked={pick} onImported={openImported} analyzeBody={analyzeBody} />}
+              : <SourcePicker onPicked={pick} onImported={openImported} analyzeBody={analyzeBody} kind={kind} />}
           </div>
         </Card>
 
@@ -495,9 +508,9 @@ export default function Clipper() {
         )}
 
         {video.data && all.length === 0 && !analysis && video.data.status !== "failed" && (
-          <Empty icon={<Sparkles className="h-8 w-8" />} title={video.data.status === "analyzed" ? "No moment scored above your minimum" : "Ready when you are"}>
+          <Empty icon={<Sparkles className="h-8 w-8" />} title={video.data.status !== "analyzed" ? "Ready when you are" : analysisNote.includes("holds up as") ? "Nothing of that kind held up" : "No moment scored above your minimum"}>
             {video.data.status === "analyzed"
-              ? String((video.data.analysis as { note?: string } | null)?.note || "Lower the minimum score or widen the clip length, then generate again.")
+              ? analysisNote || "Lower the minimum score or widen the clip length, then generate again."
               : "Choose your options and press Generate Clips."}
           </Empty>
         )}

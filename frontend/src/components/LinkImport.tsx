@@ -2,7 +2,7 @@
 // ClipForge never signs in to a site and never reads browser cookies, so only public videos work.
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Download, Link2, ShieldAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api, type Job, type LinkInfo } from "../lib/api";
 import { bytes, duration } from "../lib/format";
 import { useActiveJobs, useRefreshAll } from "../lib/hooks";
@@ -17,9 +17,10 @@ const QUALITIES = [
 ];
 const BUSY = (job: Job | undefined | null) => job?.status === "queued" || job?.status === "running";
 
-export function LinkImport({ analyzeBody, onImported }: {
+export function LinkImport({ analyzeBody, onImported, kind }: {
   analyzeBody: () => Record<string, unknown>;   // the current "How to clip it" settings
   onImported: (videoId: number) => void;
+  kind?: ReactNode;                              // the choice of what to look for, shown with the video found
 }) {
   const refresh = useRefreshAll();
   const active = useActiveJobs();
@@ -144,6 +145,7 @@ export function LinkImport({ analyzeBody, onImported }: {
             <ErrorNote error={new Error(`About ${bytes(found.approx_bytes ?? 0)} at this quality, over the ${found.limit_gb} GB limit for imports. Choose a lower quality.`)} />
           )}
 
+          {kind}
           <Field label="Why may you clip this video?" hint="A video being public does not make it free to repost. Your answer is saved with the video and added to every clip's post text.">
             <Select value={rights} onChange={(event) => setRights(event.target.value)} aria-label="Why may you clip this video?">
               <option value="" disabled>Choose…</option>
