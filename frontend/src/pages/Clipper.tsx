@@ -7,7 +7,7 @@ import { ClipCard, ClipViewer, RightsBadge, SourcePeek, useClipActions } from ".
 import { FocusPicker } from "../components/FocusPicker";
 import { JobStages } from "../components/JobStages";
 import { LinkImport } from "../components/LinkImport";
-import { MomentClip, type MomentTimes } from "../components/MomentClip";
+import { MomentClip, emptyMoment, markMoment, type MomentTimes } from "../components/MomentClip";
 import { VideoWorkLog } from "../components/WorkLog";
 import { ProjectSelect } from "../components/projects";
 import { Badge, Button, Card, CardHeader, Empty, ErrorNote, Field, Input, Progress, Segmented, Select, Switch, useToast } from "../components/ui";
@@ -361,7 +361,7 @@ export default function Clipper() {
   const [peek, setPeek] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<unknown>(null);
-  const [moment, setMoment] = useState<MomentTimes>({ start: "", end: "" });
+  const [moment, setMoment] = useState<MomentTimes>(emptyMoment);
 
   // Start from the defaults saved in Settings, once.
   useEffect(() => {
@@ -396,7 +396,7 @@ export default function Clipper() {
   const pick = (v: Video | null) => {
     setFilter("all");
     setStartError(null);
-    setMoment({ start: "", end: "" });
+    setMoment(emptyMoment);
     setParams(v ? { video: String(v.id) } : {});
   };
 
@@ -544,7 +544,7 @@ export default function Clipper() {
       <ClipViewer clip={viewed} options={options.data} onClose={() => setViewing(null)} onPeek={setPeek} />
       {videoId !== null && <div className="xl:col-start-2"><VideoWorkLog videoId={videoId} /></div>}
       <SourcePeek videoId={videoId} time={peek} title={video.data?.title} onClose={() => setPeek(null)} marks={moment}
-        onMark={(which, seconds) => setMoment((current) => ({ ...current, [which]: clock(seconds, true) }))} />
+        onMarks={setMoment} onMark={(which, seconds) => setMoment((current) => markMoment(current, which, seconds))} />
     </div>
   );
 }

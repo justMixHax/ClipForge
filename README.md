@@ -190,9 +190,12 @@ nothing is said in them.</sub>
    rights note.
 7. **Clip a moment yourself.** Found a good moment while watching? Under **3 · Clip a moment yourself**, type
    where it starts (`1:02:15`, `62:15`, or paste a YouTube link copied at that moment), or press **Watch and
-   mark** and use **Start here** and **End here** in the player. Leave the end empty and Claude ends it right
-   after the payoff. The same work as for the AI's picks follows: title, hook, score, ChatGPT's verdict,
-   captions, render and checks. Your start is kept; only a start in the middle of a word moves to its edge.
+   mark** and use **Start here** and **End here** in the player. Want several pieces in one clip, say 0:00 to
+   1:00 and then 2:35 to 3:00? Mark each piece with Start here and End here: the pieces are joined in order
+   into one clip, and the 10-minute limit counts only what plays. Leave the end empty and Claude ends it right
+   after the payoff. The same
+   work as for the AI's picks follows: title, hook, score, ChatGPT's verdict, captions, render and checks. Your
+   start is kept; only a start in the middle of a word moves to its edge.
 8. **Thumbnail and TikTok caption.** Every rendered clip gets a thumbnail: its best moment (sharp, well lit, a
    face clearly visible), framed like the clip, with two to six big words on it and one of them in colour. The
    words stay clear of faces and of the bottom, where TikTok puts its caption and buttons. When Claude picks a

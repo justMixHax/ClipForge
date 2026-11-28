@@ -1,7 +1,7 @@
 // Everything about showing one clip: its score, why it got that score, and what you can do with it.
 import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, FileText, Film,
-  Heart, MessageSquareWarning, Pencil, Play, RefreshCw, Trash2, X, XCircle,
+  Heart, MessageSquareWarning, Pencil, Play, RefreshCw, Scissors, Trash2, X, XCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,6 +9,7 @@ import type { Clip, Job, Options } from "../lib/api";
 import { api } from "../lib/api";
 import { FEEDBACK_LABELS, PERMISSION_LABELS, bytes, clock, confidenceLabel, cx, duration, scoreTone } from "../lib/format";
 import { useClip, usePatchClip, useRefreshAll } from "../lib/hooks";
+import { PartList, type MomentMark, type MomentTimes } from "./MomentClip";
 import { PromptEditButton, PromptEditPanel } from "./promptedit";
 import { sourceTime, ThumbnailPanel, TikTokCaption, YouTubeText } from "./thumbnail";
 import { Badge, Button, Modal, Progress, Switch, useToast, type Tone } from "./ui";
@@ -435,26 +436,37 @@ export function ClipViewer({ clip: given, options, onClose, onPeek }: { clip: Cl
 }
 
 /** Play the original video from a timestamp, to check a suggestion against its source. */
-export function SourcePeek({ videoId, time, title, onClose, onMark, marks }: {
+export function SourcePeek({ videoId, time, title, onClose, onMark, marks, onMarks }: {
   videoId: number | null; time: number | null; title?: string; onClose: () => void;
-  /** With this, the player offers Start here and End here for "Clip a moment yourself". */
-  onMark?: (which: "start" | "end", seconds: number) => void; marks?: { start: string; end: string };
+  /** With this, the player offers Start here and End here for "Clip a moment yourself": each pair marks one part
+   *  to keep, and the parts are joined in order. */
+  onMark?: (which: MomentMark, seconds: number) => void; marks?: MomentTimes; onMarks?: (next: MomentTimes) => void;
 }) {
   const player = useRef<HTMLVideoElement>(null);
   if (videoId === null || time === null) return null;
-  const mark = (which: "start" | "end") => {
+  const mark = (which: MomentMark) => {
     if (player.current && onMark) onMark(which, player.current.currentTime);
   };
+  const open = marks?.partFrom !== null && marks?.partFrom !== undefined;
+  const parts = marks?.parts.length ?? 0;
   return (
     <Modal open onClose={onClose} title={`Source${title ? `: ${title}` : ""} at ${clock(time, true)}`} wide>
       <video ref={player} src={`/api/videos/${videoId}/stream#t=${Math.max(0, time - 0.5).toFixed(2)}`} controls autoPlay playsInline className="max-h-[72vh] w-full rounded-xl border border-line" />
       {onMark ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => mark("start")}>Start here</Button>
-          <Button size="sm" onClick={() => mark("end")}>End here</Button>
-          <span className="text-xs text-faint">
-            {marks?.start ? `Start ${marks.start}` : "No start marked yet"}{marks?.end ? ` · End ${marks.end}` : ""}. These go into “Clip a moment yourself”.
-          </span>
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant={open ? "secondary" : "primary"} onClick={() => mark("start")}
+              title={parts ? "Start another part here" : "The clip starts here"}>
+              <Scissors className="h-3.5 w-3.5" />{parts ? "Start next part here" : "Start here"}
+            </Button>
+            <Button size="sm" variant={open ? "primary" : "secondary"} onClick={() => mark("end")}
+              title={open ? "This part ends here" : parts ? "Move the end of the last part here" : "The clip ends here"}>End here</Button>
+            <span className="text-xs text-faint">
+              {parts ? "Mark another part to add it, or close the player and press Make this clip."
+                : "Mark each part you want with Start here and End here. The parts are joined in order into one clip."}
+            </span>
+          </div>
+          {marks && onMarks && <PartList times={marks} onTimes={onMarks} />}
         </div>
       ) : <p className="mt-2 text-xs text-faint">Playing the untouched source from just before the timestamp.</p>}
     </Modal>

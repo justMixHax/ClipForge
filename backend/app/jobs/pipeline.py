@@ -37,6 +37,7 @@ from ..discovery.service import viewer_moments
 from ..editing.captions import (CaptionWord, build_ass, build_srt, build_vtt, mark_emphasis, resolve_style,
                                 words_for_clip)
 from ..editing.follow import follow_path
+from ..editing.prompt_edit import fit_cuts
 from ..editing.qc import run_checks, summarize
 from ..editing.reframe import ASPECTS, LAYOUTS, FaceSummary, analyze_faces, plan_layout
 from ..editing.render import RenderRequest, render_clip
@@ -799,9 +800,11 @@ def _analyze(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
 
 # --------------------------------------------------------------------------------------- your own moments
 def enqueue_moment(session: Session, video: Video, *, start: float, end: float | None,
-                   options: dict[str, Any] | None = None) -> Job:
-    """Queue a clip from a moment you chose. Asking again for the same start while it waits returns that job."""
+                   skips: Sequence[Sequence[float]] | None = None, options: dict[str, Any] | None = None) -> Job:
+    """Queue a clip from a moment you chose. Asking again for the same start while it waits returns that job.
+    skips: parts you skipped while watching ([from, to] in seconds of the source), left out of the clip."""
     payload = {"start": round(float(start), 3), "end": None if end is None else round(float(end), 3),
+               "skips": [[round(float(a), 3), round(float(b), 3)] for a, b in skips or []],
                "options": dict(options or {})}
     return queue.enqueue(session, "moment", payload, video_id=video.id, priority=8, stages=stage_list("moment"),
                          target=("moment", f"{video.id}@{payload['start']:.1f}"))
@@ -918,6 +921,12 @@ def _moment(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
     ctx.start("save")
     settings = opts.clip_settings()
     settings["captions"]["censor"] = bool(cfg["captions.censor"])
+    skipped = fit_cuts(payload.get("skips") or [], highlight.start, highlight.end)
+    if skipped:                    # the gaps between the parts you marked: left out, so the parts play joined
+        settings["cuts"] = [[a, b] for a, b in skipped]
+        kept = leave_out([(highlight.start, highlight.end)], skipped)
+        ctx.say("forge", f"Joined the {len(kept)} parts you marked: "
+                         + ", ".join(f"{_clock(a)} to {_clock(b)}" for a, b in kept) + ".")
     with db.session_scope() as s:
         clip = Clip(video_id=video.id, project_id=video.project_id, storage_key=storage.new_key(), origin="manual",
                     title=highlight.title[:300], hook_text=highlight.hook_text[:300], hook_options=highlight.hook_options,
@@ -931,8 +940,11 @@ def _moment(ctx: JobContext, job: dict[str, Any]) -> dict[str, Any]:
         s.flush()
         enqueue_render(s, clip, priority=8)
         clip_id = clip.id
+    span = highlight.end - highlight.start
+    plays = span - sum(b - a for a, b in skipped)
+    length = f"{plays:.0f} s of joined parts" if skipped else f"{span:.0f} s"
     ctx.say("forge", f"Saved your clip from {_clock(highlight.start)} to {_clock(highlight.end)} "
-                     f"({highlight.end - highlight.start:.0f} s) and started rendering it.")
+                     f"({length}) and started rendering it.")
     return {"clip_id": clip_id, "note": note, "timing": timing}
 
 

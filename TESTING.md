@@ -8,14 +8,14 @@ What is tested, how to run it, what was checked by hand, and what has not been c
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1
 ```
 
-The fast suite: 1,235 tests, about eight and a half minutes (most of it real renders), plus a type-check of the
+The fast suite: 1,245 tests, about seven to eight and a half minutes (most of it real renders), plus a type-check of the
 interface. No speech model is needed; tests that need FFmpeg are skipped if it is not installed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\test.ps1 -All
 ```
 
-Everything, including the 8 slow tests that load the real speech model and process the sample video: 1,243
+Everything, including the 8 slow tests that load the real speech model and process the sample video: 1,253
 tests, about ten minutes. They need the sample video, which is not kept in Git:
 
 ```powershell
@@ -29,6 +29,11 @@ To run one file: from the `backend` folder, `<environment>\Scripts\python.exe -m
 0 failed, 0 skipped, in two runs: the fast suite's 1,235 in 8 minutes 28 seconds, then the 8 slow tests in
 1 minute 30 seconds. (Two wordings in the requests to Claude were changed after the fast run; the 143 tests of
 the requests, the second look and the analysis job were run again and passed.)
+
+**Fast suite, 28 November 2026** (after "Clip a moment yourself" learned to join several parts): 1,245 passed,
+0 failed, in 7 minutes 8 seconds. The 8 slow tests were not run again. Tried for real on a separate copy holding
+only Sintel (© Blender Foundation, CC BY 3.0): parts 5:00 to 5:05 and 5:20 to 5:30, marked in the player, gave
+a clip of exactly 15.0 seconds.
 
 **Tried for real, 27 November 2026 (the kind of moment asked for, and Claude's second look):** on a separate copy
 holding only Sintel (© Blender Foundation, CC BY 3.0), with Claude Sonnet through the Claude Code tool and frames

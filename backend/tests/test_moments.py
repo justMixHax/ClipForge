@@ -19,9 +19,11 @@ pytestmark = pytest.mark.ffmpeg
 # The story in the test video starts around 13.8 s and ends around 36 s. Clips are 8 to 30 s long.
 
 
-def moment(video: Video, start: float, end: float | None = None, **overrides) -> Job:  # noqa: F811
+def moment(video: Video, start: float, end: float | None = None, skips: list | None = None,  # noqa: F811
+           **overrides) -> Job:
     with db.session_scope() as s:
-        pipeline.enqueue_moment(s, s.get(Video, video.id), start=start, end=end, options={**OPTIONS, **overrides})
+        pipeline.enqueue_moment(s, s.get(Video, video.id), start=start, end=end, skips=skips,
+                                options={**OPTIONS, **overrides})
         # renders queued by an earlier moment wait their turn here, so the next job run is this moment
         s.query(Job).filter(Job.type == "render", Job.status == "queued").update({"priority": -100})
     return run_next()
@@ -199,7 +201,79 @@ def test_a_moment_near_the_end_of_the_video_stops_at_the_end(video: Video, model
     assert clip.start == 37.0 and clip.end <= video.duration + 0.01 and clip.end > clip.start
 
 
+# ------------------------------------------------------------------------------- parts you skip while watching
+def test_parts_you_skipped_are_left_out_of_the_clip(video: Video, model: ScriptedModel):  # noqa: F811
+    job = moment(video, 14.2, 30.0, skips=[[18.0, 22.0], [25.0, 26.5]])
+
+    assert job.status == "succeeded", job.error
+    (clip,) = clips_of(video)
+    assert (clip.start, clip.end) == (14.2, 30.0)
+    assert clip.settings["cuts"] == [[18.0, 22.0], [25.0, 26.5]]
+    with db.session_scope() as s:
+        words = pipeline.load_words(s, video.id)
+    assert pipeline.clip_segments(clip.start, clip.end, words, False, cuts=clip.settings["cuts"]) == [
+        (14.2, 18.0), (22.0, 25.0), (26.5, 30.0)]
+    assert ("forge", "Joined the 3 parts you marked: 0:00:14 to 0:00:18, 0:00:22 to 0:00:25, 0:00:26 to 0:00:30.") \
+        in lines(job)
+    assert any(actor == "forge" and "Saved your clip from 0:00:14 to 0:00:30 (10 s of joined parts)" in text
+               for actor, text in lines(job))
+
+
+def test_a_skip_past_the_end_of_the_finished_clip_is_trimmed_to_it(video: Video, model: ScriptedModel):  # noqa: F811
+    job = moment(video, 14.2, 30.0, skips=[[28.0, 40.0], [33.0, 35.0]])
+
+    assert job.status == "succeeded", job.error
+    (clip,) = clips_of(video)
+    assert clip.settings["cuts"] == [[28.0, 30.0]]          # the second skip lies after the end: nothing to leave out
+
+
+def test_without_skips_a_clip_has_no_parts_left_out(video: Video, model: ScriptedModel):  # noqa: F811
+    moment(video, 14.2, 30.0)
+
+    (clip,) = clips_of(video)
+    assert "cuts" not in clip.settings
+
+
 # -------------------------------------------------------------------------------------------------- the API
+def test_parts_you_skip_go_with_the_moment_and_can_be_typed(client: TestClient, uploaded: dict):  # noqa: F811
+    response = client.post(f"/api/videos/{uploaded['id']}/moments",
+                           json={"start": "0:00.2", "end": "0:02.8", "skips": [["0:01", "0:01.5"], [2.0, 2.2]]})
+
+    assert response.status_code == 200, response.text
+    with db.session_scope() as s:
+        payload = s.get(Job, response.json()["id"]).payload
+    assert payload["skips"] == [[1.0, 1.5], [2.0, 2.2]]
+
+
+def test_the_ten_minute_limit_counts_only_the_parts_that_play(client: TestClient, uploaded: dict):  # noqa: F811
+    with db.session_scope() as s:
+        s.get(Video, uploaded["id"]).duration = 3600.0     # a long stream
+
+    far_apart = client.post(f"/api/videos/{uploaded['id']}/moments",
+                            json={"start": 60, "end": 1500, "skips": [[90, 1440]]})   # 30 s + 60 s of a 24 min span
+    too_long = client.post(f"/api/videos/{uploaded['id']}/moments",
+                           json={"start": 60, "end": 1500, "skips": [[90, 300]]})     # still 20 min of parts
+
+    assert far_apart.status_code == 200, far_apart.text
+    assert too_long.status_code == 400 and "at most 10 minutes" in too_long.json()["error"]
+
+
+@pytest.mark.parametrize("skips, said", [
+    ([[0.1, 0.5]], "inside your moment"),                 # starts before the moment
+    ([[1.0, 2.9]], "inside your moment"),                 # goes past the end
+    ([[1.5, 1.0]], "after"),                              # reversed
+    ([[1.0, 1.5], [1.4, 2.0]], "overlap"),
+    ([[0.3, 2.7]], "at least"),                           # leaves 0.2 s of a 2.6 s moment
+])
+def test_skips_that_do_not_make_sense_are_refused_with_a_reason(client: TestClient, uploaded: dict, skips: list,  # noqa: F811
+                                                               said: str):
+    response = client.post(f"/api/videos/{uploaded['id']}/moments",
+                           json={"start": "0:00.2", "end": "0:02.8", "skips": skips})
+
+    assert response.status_code == 400, response.text
+    assert said in response.json()["error"]
+
+
 def test_you_can_ask_for_a_clip_from_a_time_you_type(client: TestClient, uploaded: dict):  # noqa: F811
     response = client.post(f"/api/videos/{uploaded['id']}/moments", json={"start": "0:01", "options": {"length": "20-40"}})
 

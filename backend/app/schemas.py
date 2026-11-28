@@ -181,6 +181,8 @@ class MomentIn(Strict):
     that moment. Without an end, ClipForge finds one inside your clip length."""
     start: float | str = Field(..., description="When the moment starts")
     end: float | str | None = Field(None, description="When it ends (optional)")
+    skips: list[list[float | str]] = Field(default_factory=list, max_length=20,
+                                           description="Parts to leave out: [from, to] pairs inside the moment")
     options: AnalyzeIn | None = None
 
     @field_validator("start", "end")
@@ -188,6 +190,16 @@ class MomentIn(Strict):
     def _short_text(cls, value: float | str | None) -> float | str | None:
         if isinstance(value, str) and len(value) > 500:
             raise ValueError("too long to be a time or a link")
+        return value
+
+    @field_validator("skips")
+    @classmethod
+    def _pairs(cls, value: list[list[float | str]]) -> list[list[float | str]]:
+        for part in value:
+            if len(part) != 2:
+                raise ValueError("each part to leave out needs a from and a to")
+            if any(isinstance(v, str) and len(v) > 100 for v in part):
+                raise ValueError("too long to be a time")
         return value
 
 

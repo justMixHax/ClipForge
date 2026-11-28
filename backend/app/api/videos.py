@@ -234,10 +234,31 @@ def clip_a_moment(video_id: int, body: MomentIn, session: Session = Depends(get_
         end = min(end, video.duration)
         if end - start < 1.0:
             raise ClipForgeError("A clip must be at least 1 second long.")
-        if end - start > 600:
-            raise ClipForgeError("A clip can be at most 10 minutes long.")
+    skips = _skips(body.skips, start, end if end is not None else video.duration, clock)
+    if end is not None and end - start - sum(b - a for a, b in skips) > 600:
+        raise ClipForgeError("A clip can be at most 10 minutes long." + (" That counts only the parts you marked."
+                                                                          if skips else ""))
     options = body.options.model_dump(exclude_none=True) if body.options is not None else {}
-    return job_out(pipeline.enqueue_moment(session, video, start=start, end=end, options=options))
+    return job_out(pipeline.enqueue_moment(session, video, start=start, end=end, skips=skips, options=options))
+
+
+def _skips(parts: list[list[float | str]], start: float, end: float, clock) -> list[list[float]]:  # noqa: ANN001
+    """The gaps between the parts you marked to keep (what is left out when they are joined), read and checked:
+    inside the moment, in order, not overlapping, and leaving at least a second to play."""
+    skips = sorted([round(parse_time(a), 3), round(parse_time(b), 3)] for a, b in parts)
+    for a, b in skips:
+        if b <= a:
+            raise ClipForgeError(f"A gap between your parts must end after it starts ({clock(a)} to {clock(b)}).")
+        if a <= start or b >= end:
+            raise ClipForgeError(f"The gap from {clock(a)} to {clock(b)} must lie inside your moment "
+                                 f"({clock(start)} to {clock(end)}).",
+                                 hint="Mark each part with Start here and End here in the player.")
+    for (_, b), (c, _) in zip(skips, skips[1:]):
+        if c < b:
+            raise ClipForgeError("Two gaps between your parts overlap. Remove a part and mark it again.")
+    if end - start - sum(b - a for a, b in skips) < 1.0:
+        raise ClipForgeError("Your parts together must be at least 1 second long.")
+    return skips
 
 
 @router.get("/{video_id}/transcript", response_model=list[SegmentOut])
